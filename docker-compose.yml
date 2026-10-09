@@ -1,0 +1,38 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: cp5-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: mercado
+      RABBITMQ_DEFAULT_PASS: mercado_dev_123
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  postgres:
+    image: postgres:16
+    container_name: cp5-postgres
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: mercado_express
+      POSTGRES_USER: mercado
+      POSTGRES_PASSWORD: mercado_dev_123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mercado -d mercado_express"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  rabbitmq_data:
+  postgres_data:

@@ -1,0 +1,15 @@
+CP5 — Parte 2 — Mercado Express
+
+Integrantes e RM:
+1. NOME COMPLETO — RM XXXXX
+2. NOME COMPLETO — RM XXXXX
+
+GitHub: PREENCHER COM O LINK DO REPOSITÓRIO
+IDE utilizada: IntelliJ IDEA (ajustar se necessário)
+
+Serviços locais:
+- Mercado Express: http://localhost:8082
+- Banco Tranquilo simulado: http://localhost:8081
+- RabbitMQ Management: http://localhost:15672
+
+Atenção: preencher nomes, RMs, link GitHub e IDE reais antes de entregar.

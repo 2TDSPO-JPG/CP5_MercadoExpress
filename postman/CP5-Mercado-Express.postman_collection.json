@@ -1,0 +1,12 @@
+{
+  "info": {"name":"CP5 - Mercado Express e Banco Tranquilo","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "item": [
+    {"name":"Cadastrar produto","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"http://localhost:8082/api/produtos","body":{"mode":"raw","raw":"{\n  \"nome\": \"Café 500g\",\n  \"descricao\": \"Café torrado e moído\",\n  \"precoCusto\": 12.50,\n  \"precoVenda\": 19.90,\n  \"estoque\": 30\n}"}}},
+    {"name":"Criar compra aprovada","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"},{"key":"Idempotency-Key","value":"cp5-demo-001"}],"url":"http://localhost:8082/api/compras","body":{"mode":"raw","raw":"{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"seu-email-de-teste@exemplo.com\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [{ \"produtoId\": 1, \"quantidade\": 2 }]\n}"}}},
+    {"name":"Criar compra recusada (simulação)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"http://localhost:8082/api/compras","body":{"mode":"raw","raw":"{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"seu-email-de-teste@exemplo.com\",\n  \"metodoPagamento\": \"PIX\",\n  \"resultadoSimulado\": \"RECUSADO\",\n  \"itens\": [{ \"produtoId\": 1, \"quantidade\": 1 }]\n}"}}},
+    {"name":"Consultar compra (troque ID)","request":{"method":"GET","url":"http://localhost:8082/api/compras/1"}},
+    {"name":"Dashboard","request":{"method":"GET","url":"http://localhost:8082/api/dashboard"}},
+    {"name":"Listar e-mails","request":{"method":"GET","url":"http://localhost:8082/api/emails"}},
+    {"name":"Banco Tranquilo - teste direto","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"http://localhost:8081/api/pagamentos","body":{"mode":"raw","raw":"{\n  \"pedidoId\": 999,\n  \"valor\": 39.80,\n  \"metodoPagamento\": \"PIX\",\n  \"clienteNome\": \"Teste\",\n  \"clienteEmail\": \"seu-email-de-teste@exemplo.com\"\n}"}}}
+  ]
+}
