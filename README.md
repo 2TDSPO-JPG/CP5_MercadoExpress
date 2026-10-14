@@ -2,7 +2,6 @@
 
 Projeto acadêmico de integração assíncrona com Java, Spring Boot, RabbitMQ, PostgreSQL, envio de e-mail e dashboard gerencial.
 
-> **Importante sobre o Banco Tranquilo:** o enunciado disponibilizado não inclui URL nem documentação de uma API bancária real. Por isso, `banco-tranquilo-api` é uma API simulada para demonstrar o contrato de pagamento. Se o professor disponibilizar uma API oficial, substitua a URL e adapte o DTO em `mercado-express`.
 
 ## Arquitetura
 
@@ -173,3 +172,6 @@ A infraestrutura de produção precisa oferecer RabbitMQ acessível com TLS, Pos
 ## Tecnologias
 
 Java 21 · Spring Boot 3.4.5 · Spring Web · Spring Data JPA · Spring AMQP · PostgreSQL · RabbitMQ · Spring Mail · Actuator · Maven.
+
+
+![alt text](image.png)
