@@ -161,13 +161,6 @@ Sem essas configurações, o registro do e-mail permanece no banco com status `F
 
 A infraestrutura de produção precisa oferecer RabbitMQ acessível com TLS, PostgreSQL, SMTP e dois serviços Java. Configure as variáveis de ambiente por meio do painel da hospedagem; não versionar senhas. O `docker-compose.yml` fornecido é para desenvolvimento local, não uma configuração de produção pronta. Após publicar, atualize as URLs neste README e valide o fluxo ponta a ponta.
 
-## 11. Entrega
-
-- Adicione nomes/RMs do grupo no `ENTREGA.txt`.
-- Atualize o link do repositório e IDE utilizada.
-- Tire prints reais da aplicação, Postman, PostgreSQL e RabbitMQ.
-- Grave vídeo de 5–7 minutos demonstrando código, compra, mensageria, resposta de pagamento, e-mail e dashboard.
-- Gere ZIP sem `.git`, diretórios `target`, credenciais ou dados pessoais.
 
 ## Tecnologias
 
@@ -175,3 +168,95 @@ Java 21 · Spring Boot 3.4.5 · Spring Web · Spring Data JPA · Spring AMQP · 
 
 
 ![alt text](image.png)
+
+
+# Configuração de e-mail com Gmail SMTP
+
+A aplicação Mercado Express utiliza o servidor SMTP do Gmail para realizar o envio de e-mails. As credenciais são configuradas por meio de variáveis de ambiente, evitando armazenar dados sensíveis diretamente no código-fonte.
+
+### 1. Configurações SMTP
+
+- **Servidor:** `smtp.gmail.com`
+- **Porta:** `587`
+- **Autenticação SMTP:** habilitada
+- **Segurança:** STARTTLS
+
+### 2. Variáveis de ambiente
+
+Configure as seguintes variáveis no ambiente de execução da aplicação:
+
+```env
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=seuemail@gmail.com
+MAIL_PASSWORD=sua_senha_de_app
+MAIL_SMTP_AUTH=true
+MAIL_STARTTLS=true
+MAIL_FROM=seuemail@gmail.com
+```
+
+Substitua `seuemail@gmail.com` pelo endereço utilizado e `sua_senha_de_app` pela senha de app gerada pelo Google.
+
+![alt text](image-1.png)
+
+**Importante:** utilize uma senha de app do Google, e não a senha normal da conta. A criação exige que a verificação em duas etapas esteja ativada.
+
+Gere sua senha em: https://myaccount.google.com/apppasswords
+
+### 3. Configuração no Spring Boot
+
+No arquivo `application.yml`, configure o SMTP da seguinte forma:
+
+```yaml
+spring:
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_STARTTLS:true}
+            required: true
+
+app:
+  mail:
+    from: ${MAIL_FROM:no-reply@mercadoexpress.local}
+```
+
+A propriedade `app.mail.from` define o endereço remetente utilizado pela aplicação. Para enviar e-mails reais, configure `MAIL_FROM` com um endereço autorizado.
+
+### 4. Execução local
+
+No IntelliJ IDEA, acesse **Run → Edit Configurations → Environment variables** e cadastre cada variável individualmente.
+
+Alternativamente, no PowerShell, defina as variáveis antes de iniciar a aplicação:
+
+```powershell
+$env:MAIL_HOST = "smtp.gmail.com"
+$env:MAIL_PORT = "587"
+$env:MAIL_USERNAME = "seuemail@gmail.com"
+$env:MAIL_PASSWORD = "sua_senha_de_app"
+$env:MAIL_SMTP_AUTH = "true"
+$env:MAIL_STARTTLS = "true"
+$env:MAIL_FROM = "seuemail@gmail.com"
+
+mvn spring-boot:run
+```
+
+Não coloque todas as variáveis em um único campo ou no valor de `MAIL_HOST`. Cada variável deve possuir seu próprio nome e valor.
+
+### 5. Solução de problemas
+
+- **Senha ausente:** verifique se `MAIL_PASSWORD` está definida no mesmo ambiente em que a aplicação é executada.
+- **Host inválido
+
+
+
+## Links Uteis
+
+- Youtube: 
+- GitHub: [CP5_MercadoExpress](https://github.com/2TDSPO-JPG/CP5_MercadoExpress.git)
