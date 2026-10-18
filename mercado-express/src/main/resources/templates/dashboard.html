@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Dashboard da Gerência | Mercado Express</title>
   <link rel="stylesheet" href="/css/app.css">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -13,12 +15,20 @@
     <h1>Dashboard da Gerência</h1>
     <p>Compras, vendas, lucro e estoque · atualizado automaticamente a cada 5 s · <span id="updated">—</span></p>
   </div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
   <nav class="nav">
     <a href="/">Início</a>
-    <a href="/loja">Loja</a>
-    <a href="/dashboard" class="active">Dashboard</a>
-    <a href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="/loja" class="auth-only">Loja</a>
+    <a href="/dashboard" class="admin-only active">Dashboard</a>
+    <a href="http://localhost:15672" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="/login" class="guest-only">Entrar</a>
+    <a href="/cadastro" class="guest-only">Criar conta</a>
   </nav>
+  <div class="userbox auth-only">
+    <div class="who" id="user-who"></div>
+    <form th:action="@{/logout}" method="post"><button type="submit">Sair</button></form>
+  </div>
+  </div>
 </header>
 
 <main class="wrap">

@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Loja | Mercado Express</title>
   <link rel="stylesheet" href="/css/app.css">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
 </head>
 <body>
 <header class="top">
@@ -12,12 +14,20 @@
     <h1>Mercado Express · Loja</h1>
     <p>Monte o carrinho e finalize: o pagamento é processado pelo Banco Tranquilo via RabbitMQ</p>
   </div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
   <nav class="nav">
     <a href="/">Início</a>
-    <a href="/loja" class="active">Loja</a>
-    <a href="/dashboard">Dashboard</a>
-    <a href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="/loja" class="auth-only active">Loja</a>
+    <a href="/dashboard" class="admin-only">Dashboard</a>
+    <a href="http://localhost:15672" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="/login" class="guest-only">Entrar</a>
+    <a href="/cadastro" class="guest-only">Criar conta</a>
   </nav>
+  <div class="userbox auth-only">
+    <div class="who" id="user-who"></div>
+    <form th:action="@{/logout}" method="post"><button type="submit">Sair</button></form>
+  </div>
+  </div>
 </header>
 
 <main class="wrap">
@@ -32,8 +42,9 @@
       <div class="total"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
 
       <form id="checkout" autocomplete="on">
-        <label class="field">Nome<input name="clienteNome" required maxlength="120"></label>
-        <label class="field" style="margin-top:8px">E-mail (recebe a confirmação)<input name="clienteEmail" type="email" required></label>
+        <label class="field">Nome<input name="clienteNome" id="in-nome" required maxlength="120"></label>
+        <label class="field" style="margin-top:8px">E-mail (recebe a confirmação)<input name="clienteEmail" id="in-email" type="email" required></label>
+        <p class="sub" id="email-hint"></p>
         <label class="field" style="margin-top:8px">Forma de pagamento
           <select name="metodoPagamento">
             <option value="PIX">PIX</option>
@@ -55,6 +66,10 @@
           <li id="s4"><span class="dot"></span><span id="s4-txt">E-mail de confirmação</span></li>
         </ol>
         <p id="tr-msg" class="sub"></p>
+      </div>
+      <div id="meus" style="margin-top:18px">
+        <h2>Meus pedidos</h2>
+        <div id="meus-lista" class="sub">Carregando…</div>
       </div>
     </aside>
   </div>
@@ -157,6 +172,7 @@
       step('s1', 'done'); step('s2', 'done'); step('s3', 'run', 'Aguardando resposta do Banco Tranquilo…'); step('s4', '', 'E-mail de confirmação');
       toast('Compra enviada! Acompanhe o status ao lado.');
       acompanhar(r.pedidoId);
+      carregarMeusPedidos();
       loadProdutos();
     } catch (e) {
       toast(e.message, true);
@@ -181,19 +197,44 @@
         step('s3', 'run', 'Ainda pendente. Verifique se o Banco Tranquilo está rodando.');
       }
       loadProdutos();
+      carregarMeusPedidos();
     } catch (e) { toast(e.message, true); }
   }
 
   async function acompanharEmail(id, tentativas = 0) {
     try {
-      const emails = await api('/api/emails');
-      const e = emails.find(x => x.pedidoId === id);
-      if (!e && tentativas < 20) { setTimeout(() => acompanharEmail(id, tentativas + 1), 1000); return; }
-      if (e && e.status === 'ENVIADO') step('s4', 'done', `E-mail enviado para ${e.destinatario}`);
-      else if (e) step('s4', 'fail', `Falha no envio do e-mail (registrada no banco): ${e.detalhe || ''}`);
+      const st = await api(`/api/compras/${id}/status`);
+      if (!st.statusEmail && tentativas < 20) { setTimeout(() => acompanharEmail(id, tentativas + 1), 1000); return; }
+      if (st.statusEmail === 'ENVIADO') step('s4', 'done', `E-mail enviado para ${st.destinatarioEmail}`);
+      else if (st.statusEmail) step('s4', 'fail', `Falha no envio do e-mail (registrada no banco): ${st.detalheEmail || ''}`);
       else step('s4', 'run', 'E-mail ainda não registrado.');
+      carregarMeusPedidos();
     } catch (err) { toast(err.message, true); }
   }
+
+  async function carregarMeusPedidos() {
+    try {
+      const lista = await api('/api/compras/minhas');
+      document.getElementById('meus-lista').innerHTML = lista.length
+        ? lista.map(p => `<div class="cart-item"><div>#${p.pedidoId} · ${fmtData(p.criadoEm)}</div><div>${money(p.total)} ${badge(p.status)}</div></div>`).join('')
+        : 'Você ainda não fez pedidos.';
+    } catch (e) { document.getElementById('meus-lista').textContent = e.message; }
+  }
+
+  // Preenche nome/e-mail com os dados da conta. Cliente compra sempre com o e-mail da própria conta.
+  usuarioPronto.then(u => {
+    if (!u.autenticado) return;
+    const nome = document.getElementById('in-nome'), email = document.getElementById('in-email');
+    nome.value = u.nome || '';
+    email.value = u.email || '';
+    if (u.perfil !== 'ADMIN') {
+      email.readOnly = true;
+      document.getElementById('email-hint').textContent = 'A confirmação é enviada para o e-mail da sua conta.';
+    } else {
+      document.getElementById('email-hint').textContent = 'Gerência: pode registrar a compra para outro e-mail (teste).';
+    }
+    carregarMeusPedidos();
+  });
 
   loadProdutos();
 </script>

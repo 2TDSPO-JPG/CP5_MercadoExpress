@@ -87,3 +87,32 @@ label.field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; 
 .hero { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .hero .card p { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .flow { font-family: ui-monospace, Consolas, monospace; font-size: 13px; background: #f7f8fc; border: 1px solid var(--line); border-radius: 10px; padding: 12px; overflow-x: auto; white-space: pre; }
+
+/* Login / cadastro */
+.auth-page { min-height: 100vh; background: linear-gradient(135deg, #111b34 0%, #1e2a52 55%, #f4f6fb 55%); }
+.auth { max-width: 980px; margin: 0 auto; padding: 48px 16px; display: grid; grid-template-columns: 1fr 400px; gap: 32px; align-items: center; min-height: 100vh; }
+@media (max-width: 820px) { .auth { grid-template-columns: 1fr; padding-top: 24px; } .auth-page { background: var(--top); } }
+.auth-brand { color: #fff; }
+.auth-brand h1 { font-size: 34px; margin: 0 0 10px; }
+.auth-brand p { color: #c6cee1; font-size: 16px; line-height: 1.5; max-width: 420px; }
+.auth-brand ul { color: #dfe4f2; padding-left: 18px; line-height: 1.8; font-size: 14px; }
+.auth-card { padding: 28px; }
+.auth-card h2 { font-size: 22px; margin-bottom: 4px; }
+.auth-switch { text-align: center; font-size: 14px; color: var(--muted); margin: 14px 0 0; }
+.alert { padding: 10px 12px; border-radius: 8px; font-size: 14px; margin: 12px 0; }
+.alert-bad { background: var(--bad-soft); color: var(--bad); }
+.alert-ok { background: var(--ok-soft); color: var(--ok); }
+
+/* Usuário logado no topo */
+.userbox { display: flex; align-items: center; gap: 10px; color: #dfe4f2; font-size: 13px; }
+.userbox .who { display: flex; flex-direction: column; line-height: 1.2; text-align: right; }
+.userbox .who small { color: #9aa6c4; }
+.userbox form { margin: 0; }
+.userbox button { background: #ffffff1f; color: #fff; border: 0; padding: 8px 12px; border-radius: 8px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.userbox button:hover { background: #ffffff33; }
+.admin-only, .auth-only, .guest-only { display: none; }
+body.is-admin .admin-only { display: revert; }
+body.is-auth .auth-only { display: revert; }
+body.is-guest .guest-only { display: revert; }
+body.is-auth .userbox.auth-only { display: flex; }
+input[readonly] { background: #f1f3f8; color: var(--muted); }

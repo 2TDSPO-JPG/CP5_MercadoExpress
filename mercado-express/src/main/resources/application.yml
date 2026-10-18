@@ -1,5 +1,11 @@
 server:
   port: ${PORT:8082}
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax
 
 spring:
   application:
@@ -23,8 +29,8 @@ spring:
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
-    username: ${RABBITMQ_USERNAME:mercado}
-    password: ${RABBITMQ_PASSWORD:mercado_dev_123}
+    username: ${RABBITMQ_USERNAME:}
+    password: ${RABBITMQ_PASSWORD:} 
     listener:
       simple:
         # Tenta processar a mensagem até 3 vezes; depois descarta em vez de reenfileirar para sempre
@@ -50,12 +56,22 @@ spring:
 app:
   banco-tranquilo:
     url: ${BANCO_TRANQUILO_URL:http://localhost:8081}
+    # Chave exigida pela API do Banco Tranquilo (cabeçalho X-API-KEY) — mesma do banco-tranquilo-api
+    api-key: ${BANCO_API_KEY:bt-dev-chave-local-123}
 
   mail:
     from: ${MAIL_FROM:no-reply@mercadoexpress.local}
 
   # Cadastra produtos de exemplo se a tabela estiver vazia
   seed-produtos: ${SEED_PRODUTOS:true}
+
+  # Usuários criados na primeira execução (somente se ainda não existirem).
+  # Em produção, defina as variáveis de ambiente com senhas fortes.
+  usuarios:
+    admin-email: ${ADMIN_EMAIL:admin@mercadoexpress.com}
+    admin-senha: ${ADMIN_PASSWORD:Admin@2026}
+    cliente-email: ${CLIENTE_EMAIL:cliente@mercadoexpress.com}
+    cliente-senha: ${CLIENTE_PASSWORD:Cliente@2026}
 
 management:
   endpoints:

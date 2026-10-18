@@ -30,9 +30,11 @@ public class PagamentoConsumer {
     private final CompraService compras;
     private final RabbitTemplate rabbit;
 
-    public PagamentoConsumer(@Value("${app.banco-tranquilo.url}") String url, PedidoRepository pedidos,
+    public PagamentoConsumer(@Value("${app.banco-tranquilo.url}") String url,
+                             @Value("${app.banco-tranquilo.api-key}") String apiKey, PedidoRepository pedidos,
                              PagamentoRepository pagamentos, CompraService compras, RabbitTemplate rabbit) {
-        this.rest = RestClient.builder().baseUrl(url).build();
+        // Toda chamada ao Banco Tranquilo leva a chave de acesso da API (cabeçalho X-API-KEY)
+        this.rest = RestClient.builder().baseUrl(url).defaultHeader("X-API-KEY", apiKey).build();
         this.pedidos = pedidos;
         this.pagamentos = pagamentos;
         this.compras = compras;

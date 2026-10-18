@@ -3,6 +3,7 @@ package br.com.mercadoexpress.controller;
 import org.springframework.amqp.AmqpException;
 import org.springframework.http.*;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,5 +42,10 @@ public class ApiExceptionHandler {
     public ResponseEntity<Map<String, String>> brokerIndisponivel(AmqpException e) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("erro", "Broker RabbitMQ indisponível. A compra não foi registrada; tente novamente."));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<Map<String, String>> acessoNegado(AccessDeniedException e) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("erro", "Acesso negado."));
     }
 }

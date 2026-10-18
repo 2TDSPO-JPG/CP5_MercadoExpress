@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "CP5 - Mercado Express e Banco Tranquilo",
-    "description": "Testes da integração Mercado Express → RabbitMQ → Banco Tranquilo → e-mail. Ajuste a variável emailCliente para um e-mail seu. Rode a pasta inteira pelo Collection Runner.",
+    "description": "Testes da integração Mercado Express → RabbitMQ → Banco Tranquilo → e-mail, com Spring Security.\nA collection usa HTTP Basic com o usuário ADMIN (variáveis adminEmail/adminSenha). As chamadas diretas ao Banco Tranquilo enviam o cabeçalho X-API-KEY. Ajuste emailCliente para um e-mail seu e rode tudo pelo Collection Runner.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -24,9 +24,324 @@
     {
       "key": "produtoId",
       "value": "1"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@mercadoexpress.com"
+    },
+    {
+      "key": "adminSenha",
+      "value": "Admin@2026"
+    },
+    {
+      "key": "clienteEmail",
+      "value": "cliente@mercadoexpress.com"
+    },
+    {
+      "key": "clienteSenha",
+      "value": "Cliente@2026"
+    },
+    {
+      "key": "bancoApiKey",
+      "value": "bt-dev-chave-local-123"
     }
   ],
   "item": [
+    {
+      "name": "0. Segurança (Spring Security)",
+      "item": [
+        {
+          "name": "Sem login → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Senha errada → 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{adminEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "senha-errada",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cliente lista produtos → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{clienteEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{clienteSenha}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cliente acessa dashboard → 403",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{clienteEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{clienteSenha}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cliente cadastra produto → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Teste\",\n  \"precoCusto\": 1,\n  \"precoVenda\": 2,\n  \"estoque\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{clienteEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{clienteSenha}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Usuário logado (/api/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "me"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('ADMIN autenticado', () => pm.expect(pm.response.json().perfil).to.eql('ADMIN'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Banco Tranquilo sem chave → 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{bancoUrl}}/api/pagamentos",
+              "host": [
+                "{{bancoUrl}}"
+              ],
+              "path": [
+                "api",
+                "pagamentos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pedidoId\": 997,\n  \"valor\": 10,\n  \"metodoPagamento\": \"PIX\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
     {
       "name": "1. Produtos (CRUD)",
       "item": [
@@ -434,6 +749,153 @@
               ]
             }
           }
+        },
+        {
+          "name": "Compra como CLIENTE (e-mail forçado para o da conta)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"outra-pessoa@exemplo.com\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [\n    {\n      \"produtoId\": 1,\n      \"quantidade\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{clienteEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{clienteSenha}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('pedidoCliente', pm.response.json().pedidoId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Status do pedido (cliente dono)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras/{{pedidoCliente}}/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras",
+                "{{pedidoCliente}}",
+                "status"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{clienteEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{clienteSenha}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Meus pedidos (cliente)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras/minhas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras",
+                "minhas"
+              ]
+            },
+            "auth": {
+              "type": "basic",
+              "basic": [
+                {
+                  "key": "username",
+                  "value": "{{clienteEmail}}",
+                  "type": "string"
+                },
+                {
+                  "key": "password",
+                  "value": "{{clienteSenha}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -553,6 +1015,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-API-KEY",
+                "value": "{{bancoApiKey}}"
               }
             ],
             "url": {
@@ -595,6 +1061,10 @@
               {
                 "key": "Content-Type",
                 "value": "application/json"
+              },
+              {
+                "key": "X-API-KEY",
+                "value": "{{bancoApiKey}}"
               }
             ],
             "url": {
@@ -647,7 +1117,25 @@
             }
           }
         }
-      ]
+      ],
+      "auth": {
+        "type": "noauth"
+      }
     }
-  ]
+  ],
+  "auth": {
+    "type": "basic",
+    "basic": [
+      {
+        "key": "username",
+        "value": "{{adminEmail}}",
+        "type": "string"
+      },
+      {
+        "key": "password",
+        "value": "{{adminSenha}}",
+        "type": "string"
+      }
+    ]
+  }
 }

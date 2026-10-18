@@ -1,10 +1,12 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Mercado Express</title>
   <link rel="stylesheet" href="/css/app.css">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
 </head>
 <body>
 <header class="top">
@@ -12,27 +14,44 @@
     <h1>Mercado Express</h1>
     <p>Compras com pagamento assíncrono pelo Banco Tranquilo · RabbitMQ · PostgreSQL · e-mail</p>
   </div>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px">
   <nav class="nav">
     <a href="/" class="active">Início</a>
-    <a href="/loja">Loja</a>
-    <a href="/dashboard">Dashboard</a>
-    <a href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="/loja" class="auth-only">Loja</a>
+    <a href="/dashboard" class="admin-only">Dashboard</a>
+    <a href="http://localhost:15672" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="/login" class="guest-only">Entrar</a>
+    <a href="/cadastro" class="guest-only">Criar conta</a>
   </nav>
+  <div class="userbox auth-only">
+    <div class="who" id="user-who"></div>
+    <form th:action="@{/logout}" method="post"><button type="submit">Sair</button></form>
+  </div>
+  </div>
 </header>
 
 <main class="wrap">
-  <div class="cards">
+  <section class="card guest-only" style="margin-bottom:14px">
+    <h2>Bem-vindo ao Mercado Express</h2>
+    <p class="muted">Entre com sua conta para comprar na loja, ou crie uma conta de cliente em poucos segundos.</p>
+    <div class="actions" style="margin-bottom:0">
+      <a class="btn" href="/login">Entrar</a>
+      <a class="btn secondary" href="/cadastro">Criar conta</a>
+    </div>
+  </section>
+
+  <div class="cards admin-only">
     <section class="card"><div class="label">Pedidos confirmados</div><div class="value" id="confirmed">—</div></section>
     <section class="card"><div class="label">Faturamento aprovado</div><div class="value" id="sales">—</div></section>
     <section class="card"><div class="label">Lucro bruto estimado</div><div class="value" id="profit">—</div></section>
     <section class="card"><div class="label">Produtos com estoque baixo</div><div class="value" id="stock">—</div></section>
   </div>
 
-  <div class="actions">
+  <div class="actions auth-only">
     <a class="btn" href="/loja">Ir para a loja (carrinho)</a>
-    <a class="btn" href="/dashboard">Dashboard da gerência</a>
-    <a class="btn secondary" href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ Management</a>
-    <a class="btn secondary" href="/swagger-ui/index.html" target="_blank" rel="noreferrer">Swagger (API)</a>
+    <a class="btn admin-only" href="/dashboard">Dashboard da gerência</a>
+    <a class="btn secondary admin-only" href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ Management</a>
+    <a class="btn secondary admin-only" href="/swagger-ui/index.html" target="_blank" rel="noreferrer">Swagger (API)</a>
   </div>
 
   <div class="hero">
@@ -51,12 +70,14 @@
               └─▶ email.confirmacao ──▶ SMTP + emails_enviados</div>
     </section>
     <section class="card">
-      <h2>Situação dos e-mails</h2>
-      <p id="mail">Carregando…</p>
+      <h2>Acesso por perfil</h2>
+      <p><b>Cliente:</b> loja, carrinho e acompanhamento dos próprios pedidos.<br>
+        <b>Gerência (ADMIN):</b> dashboard de vendas, lucro e estoque, cadastro de produtos, controle de e-mails e reprocessamento de pagamentos.</p>
+      <p class="admin-only" id="mail">Carregando situação dos e-mails…</p>
     </section>
   </div>
 
-  <p class="foot">Indicadores carregados de /api/dashboard (PostgreSQL). Lucro bruto estimado = preço de venda − custo cadastrado; não considera impostos ou despesas.</p>
+  <p class="foot">Mercado Express · CP5 Java Advanced · Spring Boot, Spring Security, RabbitMQ e PostgreSQL.</p>
 </main>
 
 <script src="/js/app.js"></script>
@@ -70,11 +91,11 @@
       document.querySelector('#stock').textContent = d.produtosEstoqueBaixo;
       document.querySelector('#mail').textContent = `E-mails enviados: ${d.emailsEnviados} · Falhas registradas: ${d.emailsComFalha}`;
     } catch (e) {
-      document.querySelector('#mail').textContent = 'Não foi possível carregar os indicadores. Verifique se a API está em execução.';
+      document.querySelector('#mail').textContent = 'Não foi possível carregar os indicadores.';
     }
   }
-  load();
-  setInterval(load, 10000);
+  // Indicadores só para a gerência
+  usuarioPronto.then(u => { if (u.perfil === 'ADMIN') { load(); setInterval(load, 10000); } });
 </script>
 </body>
 </html>

@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Criar conta | Mercado Express</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="auth-page">
+<main class="auth">
+  <section class="auth-brand">
+    <h1>Mercado Express</h1>
+    <p>Crie sua conta de cliente para comprar na loja e receber a confirmação de pagamento por e-mail.</p>
+    <ul>
+      <li>A confirmação do pagamento é enviada para o e-mail da conta</li>
+      <li>Sua senha é guardada criptografada (BCrypt)</li>
+    </ul>
+  </section>
+
+  <section class="card auth-card">
+    <h2>Criar conta</h2>
+    <p class="sub">Todos os campos são obrigatórios.</p>
+
+    <div class="alert alert-bad" th:if="${erro}" th:text="${erro}" role="alert"></div>
+
+    <form th:action="@{/cadastro}" method="post" autocomplete="on">
+      <label class="field">Nome
+        <input name="nome" required maxlength="120" autocomplete="name" th:value="${nome}">
+      </label>
+      <label class="field" style="margin-top:10px">E-mail
+        <input type="email" name="email" required maxlength="160" autocomplete="email" th:value="${email}">
+      </label>
+      <label class="field" style="margin-top:10px">Senha
+        <input type="password" name="senha" required minlength="8" maxlength="72" autocomplete="new-password">
+      </label>
+      <p class="sub">Mínimo de 8 caracteres, com letras e números.</p>
+      <label class="field" style="margin-top:6px">Confirmar senha
+        <input type="password" name="confirmacao" required minlength="8" maxlength="72" autocomplete="new-password">
+      </label>
+      <button class="btn" type="submit" style="width:100%;margin-top:16px">Criar conta</button>
+    </form>
+
+    <p class="auth-switch">Já tem conta? <a href="/login">Entrar</a></p>
+  </section>
+</main>
+</body>
+</html>

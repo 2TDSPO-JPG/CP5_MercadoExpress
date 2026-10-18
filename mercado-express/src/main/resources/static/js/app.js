@@ -16,15 +16,44 @@ function badge(status) {
   return `<span class="badge ${STATUS_CLASS[status] || 'b-info'}">${esc(status)}</span>`;
 }
 
+// Token CSRF gerado pelo Spring Security e colocado nas páginas (<meta name="_csrf">)
+function csrfHeaders() {
+  const token = document.querySelector('meta[name="_csrf"]')?.content;
+  const header = document.querySelector('meta[name="_csrf_header"]')?.content;
+  return token && header ? { [header]: token } : {};
+}
+
 async function api(url, options = {}) {
-  const opts = { headers: { 'Content-Type': 'application/json' }, ...options };
-  const r = await fetch(url, opts);
+  const method = (options.method || 'GET').toUpperCase();
+  const headers = { 'Content-Type': 'application/json', ...(method !== 'GET' ? csrfHeaders() : {}), ...(options.headers || {}) };
+  const r = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+  if (r.status === 401) { window.location.href = '/login'; throw new Error('Sessão expirada. Faça login novamente.'); }
   if (r.status === 204) return null;
   let body = null;
   try { body = await r.json(); } catch (_) { /* sem corpo */ }
+  if (r.status === 403) throw new Error((body && body.erro) || 'Acesso negado para o seu perfil.');
   if (!r.ok) throw new Error((body && body.erro) || `Erro HTTP ${r.status}`);
   return body;
 }
+
+// Mostra o usuário logado no topo e libera/oculta itens por perfil
+let usuarioAtual = null;
+async function carregarUsuario() {
+  try {
+    const r = await fetch('/api/me', { credentials: 'same-origin' });
+    usuarioAtual = await r.json();
+  } catch (_) { usuarioAtual = { autenticado: false }; }
+  const b = document.body;
+  b.classList.toggle('is-auth', !!usuarioAtual.autenticado);
+  b.classList.toggle('is-guest', !usuarioAtual.autenticado);
+  b.classList.toggle('is-admin', usuarioAtual.perfil === 'ADMIN');
+  const who = document.getElementById('user-who');
+  if (who && usuarioAtual.autenticado) {
+    who.innerHTML = `${esc(usuarioAtual.nome)}<small>${usuarioAtual.perfil === 'ADMIN' ? 'Gerência' : 'Cliente'} · ${esc(usuarioAtual.email)}</small>`;
+  }
+  return usuarioAtual;
+}
+const usuarioPronto = carregarUsuario();
 
 let toastTimer;
 function toast(msg, isError = false) {

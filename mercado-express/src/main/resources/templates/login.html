@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Entrar | Mercado Express</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body class="auth-page">
+<main class="auth">
+  <section class="auth-brand">
+    <h1>Mercado Express</h1>
+    <p>Compras com pagamento pelo Banco Tranquilo, processadas de forma assíncrona com RabbitMQ.</p>
+    <ul>
+      <li><b>Cliente:</b> loja, carrinho e acompanhamento dos seus pedidos</li>
+      <li><b>Gerência:</b> dashboard de vendas, lucro, estoque e e-mails</li>
+    </ul>
+  </section>
+
+  <section class="card auth-card">
+    <h2>Entrar</h2>
+    <p class="sub">Use seu e-mail e senha cadastrados.</p>
+
+    <div class="alert alert-bad" th:if="${param.erro}" role="alert">E-mail ou senha inválidos.</div>
+    <div class="alert alert-ok" th:if="${param.saiu}" role="status">Você saiu do sistema.</div>
+    <div class="alert alert-ok" th:if="${param.cadastrado}" role="status">Conta criada! Faça login para continuar.</div>
+
+    <form th:action="@{/login}" method="post" autocomplete="on">
+      <label class="field">E-mail
+        <input type="email" name="email" required autofocus autocomplete="username" maxlength="160">
+      </label>
+      <label class="field" style="margin-top:10px">Senha
+        <input type="password" name="senha" required autocomplete="current-password" maxlength="72">
+      </label>
+      <button class="btn" type="submit" style="width:100%;margin-top:16px">Entrar</button>
+    </form>
+
+    <p class="auth-switch">Ainda não tem conta? <a href="/cadastro">Cadastre-se</a></p>
+    <p class="auth-switch"><a href="/">← Voltar para o início</a></p>
+  </section>
+</main>
+</body>
+</html>

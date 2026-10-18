@@ -3,6 +3,11 @@ server:
 spring:
   application:
     name: banco-tranquilo-api
+
+app:
+  # Chave que o Mercado Express precisa enviar no cabeçalho X-API-KEY
+  api-key: ${BANCO_API_KEY:bt-dev-chave-local-123}
+
 management:
   endpoints:
     web:
