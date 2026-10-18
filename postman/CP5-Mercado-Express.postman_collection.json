@@ -1,12 +1,653 @@
 {
-  "info": {"name":"CP5 - Mercado Express e Banco Tranquilo","schema":"https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "info": {
+    "name": "CP5 - Mercado Express e Banco Tranquilo",
+    "description": "Testes da integração Mercado Express → RabbitMQ → Banco Tranquilo → e-mail. Ajuste a variável emailCliente para um e-mail seu. Rode a pasta inteira pelo Collection Runner.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8082"
+    },
+    {
+      "key": "bancoUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "emailCliente",
+      "value": "seu-email-de-teste@exemplo.com"
+    },
+    {
+      "key": "pedidoId",
+      "value": "1"
+    },
+    {
+      "key": "produtoId",
+      "value": "1"
+    }
+  ],
   "item": [
-    {"name":"Cadastrar produto","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"http://localhost:8082/api/produtos","body":{"mode":"raw","raw":"{\n  \"nome\": \"Café 500g\",\n  \"descricao\": \"Café torrado e moído\",\n  \"precoCusto\": 12.50,\n  \"precoVenda\": 19.90,\n  \"estoque\": 30\n}"}}},
-    {"name":"Criar compra aprovada","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"},{"key":"Idempotency-Key","value":"cp5-demo-001"}],"url":"http://localhost:8082/api/compras","body":{"mode":"raw","raw":"{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"seu-email-de-teste@exemplo.com\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [{ \"produtoId\": 1, \"quantidade\": 2 }]\n}"}}},
-    {"name":"Criar compra recusada (simulação)","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"http://localhost:8082/api/compras","body":{"mode":"raw","raw":"{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"seu-email-de-teste@exemplo.com\",\n  \"metodoPagamento\": \"PIX\",\n  \"resultadoSimulado\": \"RECUSADO\",\n  \"itens\": [{ \"produtoId\": 1, \"quantidade\": 1 }]\n}"}}},
-    {"name":"Consultar compra (troque ID)","request":{"method":"GET","url":"http://localhost:8082/api/compras/1"}},
-    {"name":"Dashboard","request":{"method":"GET","url":"http://localhost:8082/api/dashboard"}},
-    {"name":"Listar e-mails","request":{"method":"GET","url":"http://localhost:8082/api/emails"}},
-    {"name":"Banco Tranquilo - teste direto","request":{"method":"POST","header":[{"key":"Content-Type","value":"application/json"}],"url":"http://localhost:8081/api/pagamentos","body":{"mode":"raw","raw":"{\n  \"pedidoId\": 999,\n  \"valor\": 39.80,\n  \"metodoPagamento\": \"PIX\",\n  \"clienteNome\": \"Teste\",\n  \"clienteEmail\": \"seu-email-de-teste@exemplo.com\"\n}"}}}
+    {
+      "name": "1. Produtos (CRUD)",
+      "item": [
+        {
+          "name": "Listar produtos",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('retorna lista', () => pm.expect(pm.response.json()).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cadastrar produto",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Sabão em pó 1kg\",\n  \"descricao\": \"Lava roupas\",\n  \"precoCusto\": 8.0,\n  \"precoVenda\": 14.5,\n  \"estoque\": 15\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('produtoId', pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar produto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos/{{produtoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos",
+                "{{produtoId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Atualizar produto",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos/{{produtoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos",
+                "{{produtoId}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Sabão em pó 1kg\",\n  \"descricao\": \"Lava roupas - promoção\",\n  \"precoCusto\": 8.0,\n  \"precoVenda\": 13.9,\n  \"estoque\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('estoque atualizado', () => pm.expect(pm.response.json().estoque).to.eql(20));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Excluir produto",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/produtos/{{produtoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "produtos",
+                "{{produtoId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('204 No Content', () => pm.response.to.have.status(204));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Compras (RabbitMQ + Banco Tranquilo)",
+      "item": [
+        {
+          "name": "Criar compra aprovada",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"{{emailCliente}}\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [\n    {\n      \"produtoId\": 1,\n      \"quantidade\": 2\n    },\n    {\n      \"produtoId\": 2,\n      \"quantidade\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "const r = pm.response.json();",
+                  "pm.test('status inicial PENDENTE', () => pm.expect(r.status).to.eql('PENDENTE'));",
+                  "pm.collectionVariables.set('pedidoId', r.pedidoId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consultar compra (aguarde 1-2 s)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras/{{pedidoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras",
+                "{{pedidoId}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('pedido processado pelo Banco Tranquilo', () => pm.expect(pm.response.json().status).to.be.oneOf(['CONFIRMADO','PENDENTE']));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Criar compra recusada (simulação)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"{{emailCliente}}\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [\n    {\n      \"produtoId\": 1,\n      \"quantidade\": 1\n    }\n  ],\n  \"resultadoSimulado\": \"RECUSADO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('202 Accepted', () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set('pedidoId', pm.response.json().pedidoId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra com estoque insuficiente (erro 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"{{emailCliente}}\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [\n    {\n      \"produtoId\": 1,\n      \"quantidade\": 99999\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('mensagem de erro', () => pm.expect(pm.response.json().erro).to.include('Estoque insuficiente'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Compra inválida - e-mail errado (erro 400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clienteNome\": \"Cliente Demonstração\",\n  \"clienteEmail\": \"email-invalido\",\n  \"metodoPagamento\": \"PIX\",\n  \"itens\": [\n    {\n      \"produtoId\": 1,\n      \"quantidade\": 2\n    },\n    {\n      \"produtoId\": 2,\n      \"quantidade\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reprocessar pedido com ERRO (Banco estava fora)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/compras/{{pedidoId}}/reprocessar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "compras",
+                "{{pedidoId}}",
+                "reprocessar"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Dashboard e e-mails",
+      "item": [
+        {
+          "name": "Resumo do dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('tem faturamento', () => pm.expect(pm.response.json()).to.have.property('faturamentoAprovado'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Vendas por dia",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/vendas-por-dia?dias=14",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "vendas-por-dia?dias=14"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Vendas, lucro e estoque por produto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/produtos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "produtos"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Compras realizadas",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/dashboard/compras?limite=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "dashboard",
+                "compras?limite=20"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Histórico de e-mails (emails_enviados)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/emails",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "emails"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Banco Tranquilo (teste direto)",
+      "item": [
+        {
+          "name": "Pagamento aprovado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{bancoUrl}}/api/pagamentos",
+              "host": [
+                "{{bancoUrl}}"
+              ],
+              "path": [
+                "api",
+                "pagamentos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pedidoId\": 999,\n  \"valor\": 39.8,\n  \"metodoPagamento\": \"PIX\",\n  \"clienteNome\": \"Teste\",\n  \"clienteEmail\": \"{{emailCliente}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('APROVADO', () => pm.expect(pm.response.json().status).to.eql('APROVADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pagamento recusado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{bancoUrl}}/api/pagamentos",
+              "host": [
+                "{{bancoUrl}}"
+              ],
+              "path": [
+                "api",
+                "pagamentos"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pedidoId\": 998,\n  \"valor\": 39.8,\n  \"metodoPagamento\": \"PIX\",\n  \"clienteNome\": \"Teste\",\n  \"clienteEmail\": \"{{emailCliente}}\",\n  \"resultadoSimulado\": \"RECUSADO\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('RECUSADO', () => pm.expect(pm.response.json().status).to.eql('RECUSADO'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health do Banco Tranquilo",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{bancoUrl}}/api/pagamentos/health",
+              "host": [
+                "{{bancoUrl}}"
+              ],
+              "path": [
+                "api",
+                "pagamentos",
+                "health"
+              ]
+            }
+          }
+        }
+      ]
+    }
   ]
 }

@@ -1,12 +1,20 @@
-# Roteiro de vídeo — 5 a 7 minutos
+# Roteiro do vídeo (5 a 7 minutos)
 
-1. **0:00–0:40 — Contexto:** apresente Mercado Express, Banco Tranquilo simulado, RabbitMQ e PostgreSQL.
-2. **0:40–1:30 — Código:** mostre os dois projetos, DTOs, entidades, produtor e consumidores.
-3. **1:30–2:30 — Compra:** no Postman, cadastre produto e envie uma compra; explique o `202 Accepted` e o status inicial `PENDENTE`.
-4. **2:30–3:20 — Mensageria:** no RabbitMQ Management, mostre exchange, routing keys, filas e consumidores; envie uma segunda compra para observar o fluxo.
-5. **3:20–4:10 — Pagamento:** mostre resposta da API simulada e o pedido confirmado/recusado.
-6. **4:10–4:50 — E-mail:** mostre mensagem recebida em uma caixa de teste SMTP e o registro em `/api/emails`/PostgreSQL. Se SMTP não estiver configurado, explique honestamente o registro da falha; não alegue envio bem-sucedido.
-7. **4:50–5:40 — Dashboard:** abra a página inicial e `/api/dashboard`; compare os números com os dados persistidos.
-8. **5:40–6:30 — Cenários negativos:** mostre recusa simulada ou estoque insuficiente e conclua.
+Antes de gravar: `docker compose up -d`, suba os dois serviços, configure o e-mail, abra em abas o RabbitMQ (15672), a loja, o dashboard, o Postman e a caixa de e-mail.
 
-Grave uma execução real. Não inclua senhas, tokens, dados pessoais reais ou credenciais no vídeo.
+1. **0:00–0:40 — Apresentação.** Integrantes, objetivo e o desenho da arquitetura (README, seção 1).
+2. **0:40–1:40 — Código.**
+   - `RabbitConfig`: exchange, 3 filas e bindings.
+   - `CompraService`: produtor da mensagem.
+   - `PagamentoConsumer`: chama o Banco Tranquilo.
+   - `ResultadoPagamentoConsumer` e `EmailConsumer`.
+   - `PagamentoController` do Banco Tranquilo.
+3. **1:40–2:20 — RabbitMQ Dashboard.** Exchange `mercado.pagamentos.exchange`, bindings, as 3 filas com 1 consumidor cada.
+4. **2:20–3:20 — Compra pela loja.** Adicione produtos ao carrinho e finalize com o seu e-mail. Mostre os passos ficando verdes e, no RabbitMQ, o pico em *Message rates*.
+5. **3:20–3:50 — E-mail.** Mostre o e-mail recebido e o registro em "Controle de e-mails" no dashboard (tabela `emails_enviados`).
+6. **3:50–4:50 — Postman.** Rode a collection no **Collection Runner** (testes passando): compra aprovada, consulta, recusada, estoque insuficiente e dashboard.
+7. **4:50–5:30 — Teste interno no RabbitMQ.** Em Queues → `email.confirmacao` → **Publish message**, com `content_type=application/json` e o JSON do README (seção 8). Mostre o e-mail chegando.
+8. **5:30–6:10 — Cenário de falha.** Pare o Banco Tranquilo e faça uma compra: o pedido fica `ERRO_PAGAMENTO`. Suba o banco e clique em **Reprocessar** no dashboard.
+9. **6:10–6:50 — Dashboard da gerência.** Cards, gráficos de vendas e lucro, estoque baixo em vermelho e lista de compras. Encerramento.
+
+Não mostre senhas, a senha de app do Gmail nem o conteúdo de arquivos `.env` no vídeo.

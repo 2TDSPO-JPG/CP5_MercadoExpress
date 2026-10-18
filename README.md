@@ -1,116 +1,176 @@
 # CP5 — Parte 2 | Mercado Express + Banco Tranquilo
 
-Projeto acadêmico de integração assíncrona com Java, Spring Boot, RabbitMQ, PostgreSQL, envio de e-mail e dashboard gerencial.
+Microsserviços em **Java 21 / Spring Boot 3.4.5** que integram o **Mercado Express** à API de pagamentos do **Banco Tranquilo** usando **RabbitMQ** como broker. Compras confirmadas geram um **e-mail de confirmação de pagamento**, registrado no **PostgreSQL**, e a gerência acompanha tudo em um **dashboard com gráficos** de vendas, lucro e estoque.
 
+- **Disciplina:** Java Advanced, prof. Dr. Marcel Stefan Wagner (FIAP, TDS)
+- **IDE:** IntelliJ IDEA
+- **Vídeo de demonstração:** _adicionar o link do YouTube (não listado)_
+- **Repositório:** [github.com/2TDSPO-JPG/CP5_MercadoExpress](https://github.com/2TDSPO-JPG/CP5_MercadoExpress)
 
-## Arquitetura
+---
 
-- `mercado-express`: API de produtos/compras, persistência de pedidos/pagamentos/e-mails, produtor e consumidores RabbitMQ, dashboard REST.
-- `banco-tranquilo-api`: serviço independente que simula aprovação/recusa de pagamentos.
-- `docker-compose.yml`: RabbitMQ Management e PostgreSQL para execução local.
+## Sumário
+1. [Arquitetura](#1-arquitetura)
+2. [RabbitMQ: exchange, filas e routing keys](#2-rabbitmq-exchange-filas-e-routing-keys)
+3. [Tecnologias e dependências](#3-tecnologias-e-dependências)
+4. [Como executar](#4-como-executar)
+5. [Telas](#5-telas)
+6. [Endpoints](#6-endpoints)
+7. [Exemplos de requisição (Postman/Insomnia)](#7-exemplos-de-requisição-postmaninsomnia)
+8. [Testes pelo RabbitMQ Management](#8-testes-pelo-rabbitmq-management)
+9. [Envio de e-mail (Gmail SMTP)](#9-envio-de-e-mail-gmail-smtp)
+10. [Banco de dados](#10-banco-de-dados)
+11. [Tratamento de erros](#11-tratamento-de-erros)
+12. [Estrutura do projeto](#12-estrutura-do-projeto)
 
-Fluxo: cliente → `POST /api/compras` → pedido PENDENTE → exchange `mercado.pagamentos.exchange` / fila `pagamento.solicitado` → consumidor chama Banco Tranquilo → resultado publicado na fila `pagamento.resultado` → resultado persistido → fila de confirmação de e-mail → envio e registro de e-mail.
+---
 
-## Requisitos
+## 1. Arquitetura
 
-- JDK 21
-- Maven 3.9+ (ou Maven Wrapper gerado pela IDE)
-- Docker Desktop com Docker Compose
-- Postman ou Insomnia
-- Para e-mail real: credenciais SMTP fornecidas por um provedor. Sem SMTP, o pedido e a tentativa ficam registrados e o log da aplicação explica a falha.
+```
+ ┌──────────────┐  POST /api/compras   ┌──────────────────────────────────────────────┐
+ │ Loja (web) / │ ───────────────────▶ │ MERCADO EXPRESS (:8082)                      │
+ │   Postman    │ ◀─── 202 Accepted ── │  grava Pedido/Itens/Pagamento (PENDENTE)     │
+ └──────────────┘                      │  reserva estoque e publica a mensagem        │
+                                       └──────────────┬───────────────────────────────┘
+                                                      │ routing key: pagamento.solicitado
+                                                      ▼
+                             ┌──────────── RabbitMQ: mercado.pagamentos.exchange (topic) ─────────────┐
+                             │   fila pagamento.solicitado   fila pagamento.resultado   fila email.confirmacao │
+                             └───────┬───────────────────────────▲──────────┬────────────────────▲──────┬──┘
+                                     │                           │          │                    │      │
+                                     ▼                           │          ▼                    │      ▼
+                            PagamentoConsumer ── HTTP POST ──▶ BANCO TRANQUILO (:8081)    Resultado     EmailConsumer
+                            (chama a API do banco)  /api/pagamentos  APROVADO/RECUSADO  PagamentoConsumer   ├─ envia e-mail (SMTP)
+                                     └──────── publica resposta ─┘                     ├─ CONFIRMADO/CANCELADO └─ grava emails_enviados
+                                                                                        └─ publica e-mail se aprovado
+```
 
-## 1. Subir infraestrutura
+**Fluxo de uma compra**
+1. O cliente finaliza o carrinho na **Loja** (`/loja`) ou envia `POST /api/compras` pelo Postman.
+2. O Mercado Express valida o estoque, **reserva** as unidades e grava `pedidos`, `itens_pedido` e `pagamentos` com status **PENDENTE**. Em seguida publica a mensagem na fila `pagamento.solicitado` e responde **202 Accepted**.
+3. O `PagamentoConsumer` consome a fila e chama a **API do Banco Tranquilo** (`POST :8081/api/pagamentos`).
+4. A resposta (APROVADO/RECUSADO e `transacaoId`) é publicada na fila `pagamento.resultado`.
+5. O `ResultadoPagamentoConsumer` atualiza o pagamento e o pedido:
+   - **APROVADO** → pedido **CONFIRMADO** e mensagem publicada em `email.confirmacao`.
+   - **RECUSADO** → pedido **CANCELADO** e o estoque reservado é devolvido.
+6. O `EmailConsumer` envia o **e-mail de confirmação de pagamento** e grava o resultado (ENVIADO/FALHOU) na tabela `emails_enviados`.
+7. O **Dashboard da gerência** (`/dashboard`) mostra compras, vendas, lucro e estoque em tempo real.
 
+## 2. RabbitMQ: exchange, filas e routing keys
+
+Tudo é declarado automaticamente na inicialização, em `RabbitConfig.java`.
+
+| Tipo | Nome | Routing key | Produtor | Consumidor |
+|---|---|---|---|---|
+| Exchange (topic, durável) | `mercado.pagamentos.exchange` | — | — | — |
+| Fila durável | `pagamento.solicitado` | `pagamento.solicitado` | `CompraService` | `PagamentoConsumer` |
+| Fila durável | `pagamento.resultado` | `pagamento.resultado` | `PagamentoConsumer` | `ResultadoPagamentoConsumer` |
+| Fila durável | `email.confirmacao` | `email.confirmacao` | `ResultadoPagamentoConsumer` | `EmailConsumer` |
+
+As mensagens trafegam em **JSON** (`Jackson2JsonMessageConverter`). Os consumidores têm **retry** (3 tentativas) e são **idempotentes**: uma mensagem repetida para um pagamento que já saiu de PENDENTE é ignorada.
+
+## 3. Tecnologias e dependências
+
+Projetos criados pelo **Spring Initializr** (Maven, Java 21, Spring Boot 3.4.5).
+
+| Serviço | Dependências |
+|---|---|
+| `mercado-express` | Spring Web, Spring Data JPA, **Spring for RabbitMQ (AMQP)**, **Java Mail Sender**, Validation, Thymeleaf, Actuator, PostgreSQL Driver, Lombok, springdoc-openapi (Swagger) |
+| `banco-tranquilo-api` | Spring Web, Validation, Actuator |
+
+Dependências selecionadas no Spring Initializr:
+
+![Spring Initializr - dependências](image.png)
+
+Infraestrutura local pelo `docker-compose.yml`: **RabbitMQ 4 (com Management)** e **PostgreSQL 16**. Gráficos com **Chart.js** (CDN).
+
+## 4. Como executar
+
+**Pré-requisitos:** JDK 21, Maven 3.9+ (ou o Maven da IDE), Docker Desktop e Postman ou Insomnia.
+
+### 4.1 Subir RabbitMQ e PostgreSQL
 Na raiz do projeto:
-
 ```bash
 docker compose up -d
 ```
 
-RabbitMQ Management: http://localhost:15672 (usuário `mercado`, senha `mercado_dev_123`)
+| Serviço | Endereço | Usuário / senha |
+|---|---|---|
+| RabbitMQ Management | http://localhost:15672 | `mercado` / `mercado_dev_123` |
+| RabbitMQ (AMQP) | `localhost:5672` | `mercado` / `mercado_dev_123` |
+| PostgreSQL | `localhost:5433`, banco `mercado_express` | `mercado` / `mercado_dev_123` |
 
-PostgreSQL: `localhost:5432`, banco `mercado_express`, usuário `mercado`, senha `mercado_dev_123`.
+> O PostgreSQL do container é exposto na porta **5433** do computador para não conflitar com um PostgreSQL já instalado na 5432. Essas credenciais são **apenas de desenvolvimento local**.
 
-Estas são credenciais **somente locais**. Troque-as antes de qualquer deploy e nunca suba segredos ao GitHub.
+### 4.2 Configurar o e-mail
+Configure as variáveis `MAIL_*` (veja a [seção 9](#9-envio-de-e-mail-gmail-smtp)). Sem elas a aplicação funciona normalmente, mas o e-mail fica registrado com status `FALHOU`.
 
-## 2. Iniciar os serviços
-
-Abra dois terminais na raiz.
-
-Terminal 1:
-
+### 4.3 Iniciar os dois serviços
+Pelo IntelliJ, rode `BancoTranquiloApplication` e depois `MercadoExpressApplication`. Ou pelo terminal:
 ```bash
+# Terminal 1
 cd banco-tranquilo-api
 mvn spring-boot:run
-```
 
-Terminal 2:
-
-```bash
+# Terminal 2
 cd mercado-express
 mvn spring-boot:run
 ```
 
-Banco Tranquilo: http://localhost:8081
-Mercado Express: http://localhost:8082
-Dashboard JSON: http://localhost:8082/api/dashboard
-Health: http://localhost:8082/actuator/health
+| Página / serviço | URL |
+|---|---|
+| Página inicial | http://localhost:8082 |
+| **Loja com carrinho** | http://localhost:8082/loja |
+| **Dashboard da gerência** | http://localhost:8082/dashboard |
+| Swagger da API | http://localhost:8082/swagger-ui/index.html |
+| Banco Tranquilo (API) | http://localhost:8081/api/pagamentos/health |
+| Health check | http://localhost:8082/actuator/health |
 
-## 3. Cadastrar produto
+Na primeira execução, com a tabela vazia, são cadastrados **6 produtos de exemplo** (`DataLoader`). Para desligar, use `SEED_PRODUTOS=false`.
 
-```http
-POST http://localhost:8082/api/produtos
-Content-Type: application/json
-```
+### 4.4 Variáveis de ambiente (todas opcionais, com valores padrão)
 
-```json
-{
-  "nome": "Café 500g",
-  "descricao": "Café torrado e moído",
-  "precoCusto": 12.50,
-  "precoVenda": 19.90,
-  "estoque": 30
-}
-```
+| Variável | Padrão |
+|---|---|
+| `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | `jdbc:postgresql://localhost:5433/mercado_express` / `mercado` / `mercado_dev_123` |
+| `RABBITMQ_HOST` / `RABBITMQ_PORT` / `RABBITMQ_USERNAME` / `RABBITMQ_PASSWORD` | `localhost` / `5672` / `mercado` / `mercado_dev_123` |
+| `BANCO_TRANQUILO_URL` | `http://localhost:8081` |
+| `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` | Gmail, porta 587, sem credenciais |
 
-Guarde o `id` retornado para usar na compra. Cadastre pelo menos dois produtos para demonstrar estoque e lucro.
+## 5. Telas
 
-## 4. Enviar compra pelo Postman
+> Os prints ficam na pasta `docs/img/`.
 
-```http
-POST http://localhost:8082/api/compras
-Content-Type: application/json
-```
+### 5.1 Loja: carrinho e finalização da compra (`/loja`)
+O cliente adiciona produtos ao carrinho, informa nome, e-mail e forma de pagamento e finaliza a compra. A tela acompanha o processamento assíncrono em tempo real: pedido registrado → mensagem publicada → resposta do Banco Tranquilo → e-mail enviado. A opção **"Simular recusa"** demonstra o fluxo de pagamento recusado.
 
-```json
-{
-  "clienteNome": "Cliente Demonstração",
-  "clienteEmail": "seu-email-de-teste@exemplo.com",
-  "metodoPagamento": "PIX",
-  "itens": [
-    { "produtoId": 1, "quantidade": 2 }
-  ]
-}
-```
+![Loja com carrinho](docs/img/loja.png)
 
-A API responde `202 Accepted` com `pedidoId` e status `PENDENTE`. O processamento é assíncrono. Consulte o status em `GET http://localhost:8082/api/compras/{pedidoId}`.
+### 5.2 Dashboard da gerência (`/dashboard`)
+Atualiza sozinho a cada 5 segundos, com dados lidos do PostgreSQL:
+- **Indicadores:** faturamento aprovado, ticket médio, lucro bruto e margem, pedidos confirmados, unidades vendidas, estoque (unidades e valor a custo) e e-mails enviados/com falha.
+- **Gráficos:** vendas e lucro por dia; faturamento e lucro por produto; estoque por produto (estoque baixo em vermelho); pedidos por status.
+- **Compras realizadas:** cliente, itens, total, status do pedido, resposta do Banco Tranquilo (com `transacaoId`) e status do e-mail. Pedidos com erro de comunicação podem ser **reprocessados**.
+- **Produtos e estoque:** cadastrar, ajustar estoque e excluir produtos (CRUD).
+- **Controle de e-mails:** conteúdo da tabela `emails_enviados`.
 
-### Simular aprovação ou recusa
+![Dashboard - indicadores e gráficos](docs/img/dashboard-graficos.png)
+![Dashboard - compras, estoque e e-mails](docs/img/dashboard-tabelas.png)
 
-Por padrão, a API simulada aprova valores positivos. Para demonstrar recusas, envie opcionalmente `resultadoSimulado` com `RECUSADO` no corpo da compra. Esse campo é **apenas para a demonstração acadêmica** e não deve existir em uma integração bancária real.
+### 5.3 RabbitMQ Management
+![Exchange e bindings](docs/img/rabbitmq-exchange.png)
+![Filas e consumidores](docs/img/rabbitmq-filas.png)
 
-```json
-{
-  "clienteNome": "Cliente Demonstração",
-  "clienteEmail": "seu-email-de-teste@exemplo.com",
-  "metodoPagamento": "PIX",
-  "resultadoSimulado": "RECUSADO",
-  "itens": [{ "produtoId": 1, "quantidade": 1 }]
-}
-```
+### 5.4 Postman
+![Collection no Postman](docs/img/postman.png)
 
-## 5. Endpoints
+### 5.5 E-mail de confirmação recebido
+![E-mail de confirmação](docs/img/email.png)
 
+## 6. Endpoints
+
+### Mercado Express (`:8082`)
 | Método | Endpoint | Finalidade |
 |---|---|---|
 | GET | `/api/produtos` | Lista produtos |
@@ -118,73 +178,77 @@ Por padrão, a API simulada aprova valores positivos. Para demonstrar recusas, e
 | GET | `/api/produtos/{id}` | Consulta produto |
 | PUT | `/api/produtos/{id}` | Atualiza produto |
 | DELETE | `/api/produtos/{id}` | Exclui produto |
-| POST | `/api/compras` | Registra compra e publica mensagem |
-| GET | `/api/compras/{id}` | Consulta pedido/status |
-| GET | `/api/dashboard` | Indicadores gerenciais |
-| GET | `/api/emails` | Histórico de e-mails |
-| GET | `/actuator/health` | Health check |
-| POST | `http://localhost:8081/api/pagamentos` | Endpoint do Banco Tranquilo simulado |
+| POST | `/api/compras` | Registra compra e publica em `pagamento.solicitado` (202) |
+| GET | `/api/compras/{id}` | Consulta pedido e status |
+| POST | `/api/compras/{id}/reprocessar` | Reenvia para a fila um pedido com pagamento em ERRO |
+| GET | `/api/dashboard` | Indicadores gerais |
+| GET | `/api/dashboard/vendas-por-dia?dias=14` | Faturamento, lucro e pedidos por dia |
+| GET | `/api/dashboard/produtos` | Vendas, lucro e estoque por produto |
+| GET | `/api/dashboard/compras?limite=50` | Compras realizadas com pagamento e e-mail |
+| GET | `/api/emails` | Histórico de e-mails (`emails_enviados`) |
 
-## 6. Dashboard RabbitMQ
+### Banco Tranquilo (`:8081`)
+| Método | Endpoint | Finalidade |
+|---|---|---|
+| POST | `/api/pagamentos` | Autoriza ou recusa um pagamento e devolve `transacaoId` |
+| GET | `/api/pagamentos/health` | Status do serviço |
 
-Acesse http://localhost:15672. Abra **Exchanges** e procure `mercado.pagamentos.exchange`; em **Queues**, verifique `pagamento.solicitado`, `pagamento.resultado` e `email.confirmacao`. Em **Connections/Channels**, verifique consumidores conectados. Gere compras no Postman e atualize a tela. A aplicação declara exchanges, filas e bindings automaticamente ao iniciar.
+## 7. Exemplos de requisição (Postman/Insomnia)
 
-## 7. E-mail
+Importe `postman/CP5-Mercado-Express.postman_collection.json`. A collection tem variáveis (`baseUrl`, `bancoUrl`, `emailCliente`) e **scripts de teste automáticos**: valida os códigos HTTP e guarda o `pedidoId` criado. Altere `emailCliente` para o seu e-mail e rode a collection inteira pelo **Collection Runner**.
 
-Configure variáveis de ambiente antes de iniciar `mercado-express`:
+**Compra (JSON):**
+```http
+POST http://localhost:8082/api/compras
+Content-Type: application/json
+```
+```json
+{
+  "clienteNome": "Cliente Demonstração",
+  "clienteEmail": "seu-email@exemplo.com",
+  "metodoPagamento": "PIX",
+  "itens": [
+    { "produtoId": 1, "quantidade": 2 },
+    { "produtoId": 2, "quantidade": 1 }
+  ]
+}
+```
+**Resposta (202 Accepted):**
+```json
+{ "pedidoId": 1, "status": "PENDENTE", "total": 45.79, "mensagem": "Compra recebida para processamento assíncrono." }
+```
+Em cerca de 1 segundo, `GET /api/compras/1` passa a retornar `"status": "CONFIRMADO"`.
 
-- `MAIL_HOST`
-- `MAIL_PORT` (normalmente 587)
-- `MAIL_USERNAME`
-- `MAIL_PASSWORD`
-- `MAIL_FROM`
+**Simular pagamento recusado:** acrescente `"resultadoSimulado": "RECUSADO"` ao JSON. Esse campo existe **apenas para a demonstração acadêmica**. O pedido fica `CANCELADO`, o estoque volta e nenhum e-mail é enviado.
 
-Sem essas configurações, o registro do e-mail permanece no banco com status `FALHOU`; o serviço não afirma que enviou um e-mail que não foi entregue. Em ambiente de testes, use uma caixa SMTP própria e não coloque senhas no repositório.
+**Cadastro de produto:**
+```json
+{ "nome": "Café 500g", "descricao": "Café torrado e moído", "precoCusto": 12.50, "precoVenda": 19.90, "estoque": 30 }
+```
 
-## 8. Dashboard
+Métodos de pagamento aceitos pela loja: `PIX`, `CARTAO_CREDITO`, `CARTAO_DEBITO`, `BOLETO`. O cabeçalho opcional `Idempotency-Key` evita pedidos duplicados quando a mesma requisição é reenviada.
 
-`GET /api/dashboard` retorna totais calculados a partir do PostgreSQL: pedidos confirmados, faturamento aprovado, lucro bruto estimado (preço de venda menos custo cadastrado), produtos com estoque baixo e pagamentos por status. Lucro bruto não considera impostos, frete ou despesas não cadastradas.
+## 8. Testes pelo RabbitMQ Management
 
-## 9. Testes sugeridos
+Acesse http://localhost:15672 (`mercado` / `mercado_dev_123`).
 
-1. Cadastrar produto com estoque.
-2. Fazer compra válida e verificar `PENDENTE` → `CONFIRMADO`.
-3. Verificar mensagem nas filas do RabbitMQ.
-4. Confirmar atualização de estoque e pagamento no PostgreSQL.
-5. Configurar SMTP e verificar recebimento e registro em `emails_enviados`.
-6. Fazer compra com `resultadoSimulado: RECUSADO` e conferir que não há e-mail de confirmação.
-7. Tentar comprar quantidade acima do estoque.
-8. Consultar dashboard antes e depois das compras.
-9. Desligar temporariamente o Banco Tranquilo e documentar o tratamento de erro.
+1. **Exchanges → `mercado.pagamentos.exchange`:** mostra os 3 bindings e a taxa de mensagens (*message rates*) durante as compras.
+2. **Queues:** as filas `pagamento.solicitado`, `pagamento.resultado` e `email.confirmacao`, cada uma com **1 consumidor**. Faça compras pela loja ou pelo Postman e acompanhe os gráficos *Message rates*.
+3. **Publicar uma mensagem manualmente (teste interno):** em **Queues → `email.confirmacao` → Publish message**:
+   - **Properties:** `content_type` = `application/json`
+   - **Payload:**
+     ```json
+     {"pedidoId": 1, "clienteNome": "Teste RabbitMQ", "clienteEmail": "seu-email@exemplo.com", "statusPagamento": "APROVADO", "valor": "45.79"}
+     ```
+   Clique em **Publish message**. O `EmailConsumer` consome a mensagem, envia o e-mail e grava em `emails_enviados`; o registro aparece no dashboard.
+4. **Get messages:** para inspecionar uma mensagem parada na fila, pare o Mercado Express (os consumidores somem), publique uma mensagem em `email.confirmacao` como no passo 3 e use **Get messages** para ver o JSON. Ao subir a aplicação de novo, a mensagem é consumida.
+5. **Banco fora do ar:** pare o `banco-tranquilo-api` e faça uma compra. O pagamento fica `ERRO`, o pedido `ERRO_PAGAMENTO` e o estoque é devolvido. Suba o banco novamente e clique em **Reprocessar** no dashboard (ou `POST /api/compras/{id}/reprocessar`).
 
-## 10. Deploy
+## 9. Envio de e-mail (Gmail SMTP)
 
-A infraestrutura de produção precisa oferecer RabbitMQ acessível com TLS, PostgreSQL, SMTP e dois serviços Java. Configure as variáveis de ambiente por meio do painel da hospedagem; não versionar senhas. O `docker-compose.yml` fornecido é para desenvolvimento local, não uma configuração de produção pronta. Após publicar, atualize as URLs neste README e valide o fluxo ponta a ponta.
+O e-mail de confirmação é enviado pelo SMTP do Gmail: `smtp.gmail.com`, porta `587`, autenticação ligada e STARTTLS. Cada tentativa é registrada na tabela `emails_enviados` com status `ENVIADO` ou `FALHOU` e o detalhe do servidor.
 
-
-## Tecnologias
-
-Java 21 · Spring Boot 3.4.5 · Spring Web · Spring Data JPA · Spring AMQP · PostgreSQL · RabbitMQ · Spring Mail · Actuator · Maven.
-
-
-![alt text](image.png)
-
-
-# Configuração de e-mail com Gmail SMTP
-
-A aplicação Mercado Express utiliza o servidor SMTP do Gmail para realizar o envio de e-mails. As credenciais são configuradas por meio de variáveis de ambiente, evitando armazenar dados sensíveis diretamente no código-fonte.
-
-### 1. Configurações SMTP
-
-- **Servidor:** `smtp.gmail.com`
-- **Porta:** `587`
-- **Autenticação SMTP:** habilitada
-- **Segurança:** STARTTLS
-
-### 2. Variáveis de ambiente
-
-Configure as seguintes variáveis no ambiente de execução da aplicação:
-
+**Variáveis de ambiente:**
 ```env
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=587
@@ -195,68 +259,78 @@ MAIL_STARTTLS=true
 MAIL_FROM=seuemail@gmail.com
 ```
 
-Substitua `seuemail@gmail.com` pelo endereço utilizado e `sua_senha_de_app` pela senha de app gerada pelo Google.
+![Senha de app do Google](image-1.png)
 
-![alt text](image-1.png)
+- Use uma **senha de app** do Google, não a senha normal da conta. Ela exige a verificação em duas etapas ativada: https://myaccount.google.com/apppasswords
+- **Nunca versione a senha.** O `.gitignore` ignora arquivos `*.env`.
 
-**Importante:** utilize uma senha de app do Google, e não a senha normal da conta. A criação exige que a verificação em duas etapas esteja ativada.
+**No IntelliJ:** *Run → Edit Configurations → Environment variables*, uma variável por linha. Não coloque todas no campo `MAIL_HOST`.
 
-Gere sua senha em: https://myaccount.google.com/apppasswords
-
-### 3. Configuração no Spring Boot
-
-No arquivo `application.yml`, configure o SMTP da seguinte forma:
-
-```yaml
-spring:
-  mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
-    properties:
-      mail:
-        smtp:
-          auth: ${MAIL_SMTP_AUTH:true}
-          starttls:
-            enable: ${MAIL_STARTTLS:true}
-            required: true
-
-app:
-  mail:
-    from: ${MAIL_FROM:no-reply@mercadoexpress.local}
-```
-
-A propriedade `app.mail.from` define o endereço remetente utilizado pela aplicação. Para enviar e-mails reais, configure `MAIL_FROM` com um endereço autorizado.
-
-### 4. Execução local
-
-No IntelliJ IDEA, acesse **Run → Edit Configurations → Environment variables** e cadastre cada variável individualmente.
-
-Alternativamente, no PowerShell, defina as variáveis antes de iniciar a aplicação:
-
+**No PowerShell:**
 ```powershell
-$env:MAIL_HOST = "smtp.gmail.com"
-$env:MAIL_PORT = "587"
 $env:MAIL_USERNAME = "seuemail@gmail.com"
 $env:MAIL_PASSWORD = "sua_senha_de_app"
-$env:MAIL_SMTP_AUTH = "true"
-$env:MAIL_STARTTLS = "true"
-$env:MAIL_FROM = "seuemail@gmail.com"
-
+$env:MAIL_FROM     = "seuemail@gmail.com"
 mvn spring-boot:run
 ```
 
-Não coloque todas as variáveis em um único campo ou no valor de `MAIL_HOST`. Cada variável deve possuir seu próprio nome e valor.
+**Solução de problemas**
+- `Authentication failed` / `535-5.7.8`: senha de app incorreta ou verificação em duas etapas desativada.
+- `Senha ausente` / e-mail `FALHOU` sem detalhe: a variável `MAIL_PASSWORD` não está definida no mesmo ambiente em que a aplicação roda.
+- `UnknownHostException`: valor errado em `MAIL_HOST` (deve ser só `smtp.gmail.com`).
+- E-mail não chegou: confira a caixa de spam e o status em `/api/emails`.
 
-### 5. Solução de problemas
+## 10. Banco de dados
 
-- **Senha ausente:** verifique se `MAIL_PASSWORD` está definida no mesmo ambiente em que a aplicação é executada.
-- **Host inválido
+**PostgreSQL** (o mesmo da Parte 1). As tabelas são criadas automaticamente pelo Hibernate (`ddl-auto: update`).
 
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5433/mercado_express
+    username: mercado
+    password: mercado_dev_123
+```
 
+| Tabela | Conteúdo |
+|---|---|
+| `produtos` | nome, descrição, preço de custo, preço de venda, estoque |
+| `pedidos` | cliente, e-mail, forma de pagamento, total, status, data, chave de idempotência |
+| `itens_pedido` | produto, quantidade, preço e custo unitários no momento da compra |
+| `pagamentos` | status (PENDENTE/APROVADO/RECUSADO/ERRO), `transacaoId` do Banco Tranquilo, detalhe |
+| `emails_enviados` | controle de envio: pedido, destinatário, assunto, status, detalhe, data |
 
-## Links Uteis
+As consultas de conferência estão em `docs/SQL_CONSULTAS.sql`.
 
-- Youtube: 
-- GitHub: [CP5_MercadoExpress](https://github.com/2TDSPO-JPG/CP5_MercadoExpress.git)
+## 11. Tratamento de erros
+
+| Situação | Comportamento |
+|---|---|
+| Estoque insuficiente / produto inexistente | `400` com mensagem; nada é gravado |
+| JSON inválido ou campos inválidos (ex.: e-mail) | `400` com os campos que falharam |
+| RabbitMQ fora do ar | `503`; a transação é desfeita e a compra não fica "presa" |
+| Banco Tranquilo fora do ar | pagamento `ERRO`, pedido `ERRO_PAGAMENTO`, estoque devolvido; permite reprocessar |
+| Pagamento recusado | pedido `CANCELADO`, estoque devolvido, sem e-mail |
+| Falha no SMTP | e-mail gravado com status `FALHOU` e o motivo |
+| Mensagem duplicada | consumidores idempotentes ignoram |
+
+## 12. Estrutura do projeto
+
+```
+CP5_Parte2_MercadoExpress/
+├── docker-compose.yml            # RabbitMQ + PostgreSQL
+├── ENTREGA.txt                   # integrantes, RM, GitHub, IDE, vídeo
+├── postman/                      # collection com testes
+├── docs/                         # roteiro do vídeo, consultas SQL, prints
+├── banco-tranquilo-api/          # API do Banco Tranquilo (:8081)
+│   └── controller/PagamentoController.java
+└── mercado-express/              # Mercado Express (:8082)
+    ├── config/      RabbitConfig (exchange/filas), DataLoader
+    ├── controller/  Produto, Compra, Dashboard, Home (páginas), ApiExceptionHandler
+    ├── service/     CompraService (produtor), PagamentoConsumer, ResultadoPagamentoConsumer, EmailConsumer
+    ├── entity/      Produto, Pedido, ItemPedido, Pagamento, EmailEnviado
+    ├── repository/  Spring Data JPA
+    └── resources/
+        ├── templates/  index.html, loja.html, dashboard.html
+        └── static/     css/app.css, js/app.js
+```

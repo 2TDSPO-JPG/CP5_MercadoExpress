@@ -2,5 +2,7 @@ target/
 .idea/
 *.iml
 .env
+*.env
+password.env
 *.log
 .DS_Store
