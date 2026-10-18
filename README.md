@@ -319,9 +319,8 @@ As consultas de conferência estão em `docs/SQL_CONSULTAS.sql`.
 ```
 CP5_Parte2_MercadoExpress/
 ├── docker-compose.yml            # RabbitMQ + PostgreSQL
-├── ENTREGA.txt                   # integrantes, RM, GitHub, IDE, vídeo
 ├── postman/                      # collection com testes
-├── docs/                         # roteiro do vídeo, consultas SQL, prints
+├── docs/                         # consultas SQL e prints (img/)
 ├── banco-tranquilo-api/          # API do Banco Tranquilo (:8081)
 │   └── controller/PagamentoController.java
 └── mercado-express/              # Mercado Express (:8082)

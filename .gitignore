@@ -6,3 +6,8 @@ target/
 password.env
 *.log
 .DS_Store
+
+# Arquivos de uso interno (não vão para o GitHub)
+ENTREGA.txt
+docs/ROTEIRO_VIDEO.md
+docs/img/LEIA-ME.txt
