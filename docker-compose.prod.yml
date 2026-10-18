@@ -1,0 +1,81 @@
+# Produção (VM Linux na Azure). Uso:
+#   cp .env.example .env   # e preencha as senhas
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "15672:15672"          # painel de gerenciamento (a porta AMQP 5672 fica só na rede interna)
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # sem porta pública
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  banco-tranquilo:
+    build: ./banco-tranquilo-api
+    restart: unless-stopped
+    environment:
+      BANCO_API_KEY: ${BANCO_API_KEY}
+      JAVA_TOOL_OPTIONS: -Xmx256m
+    ports:
+      - "8081:8081"            # opcional: testes diretos pelo Postman (exige X-API-KEY)
+
+  mercado-express:
+    build: ./mercado-express
+    restart: unless-stopped
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      banco-tranquilo:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      DB_USERNAME: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USERNAME: ${RABBITMQ_USERNAME}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD}
+      RABBITMQ_DASHBOARD_URL: ${RABBITMQ_DASHBOARD_URL}
+      BANCO_TRANQUILO_URL: http://banco-tranquilo:8081
+      BANCO_API_KEY: ${BANCO_API_KEY}
+      MAIL_HOST: smtp.gmail.com
+      MAIL_PORT: 587
+      MAIL_USERNAME: ${MAIL_USERNAME}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+      MAIL_FROM: ${MAIL_FROM}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CLIENTE_EMAIL: ${CLIENTE_EMAIL}
+      CLIENTE_PASSWORD: ${CLIENTE_PASSWORD}
+      JAVA_TOOL_OPTIONS: -Xmx768m
+    ports:
+      - "80:8082"              # aplicação em http://<ip-da-vm>/
+
+volumes:
+  rabbitmq_data:
+  postgres_data:

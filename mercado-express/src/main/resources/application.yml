@@ -30,7 +30,7 @@ spring:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:}
-    password: ${RABBITMQ_PASSWORD:} 
+    password: ${RABBITMQ_PASSWORD:}
     listener:
       simple:
         # Tenta processar a mensagem até 3 vezes; depois descarta em vez de reenfileirar para sempre
@@ -64,6 +64,9 @@ app:
 
   # Cadastra produtos de exemplo se a tabela estiver vazia
   seed-produtos: ${SEED_PRODUTOS:true}
+
+  # Link do botão "RabbitMQ" nas páginas (no deploy, aponte para http://<ip-da-vm>:15672)
+  rabbitmq-dashboard-url: ${RABBITMQ_DASHBOARD_URL:http://localhost:15672}
 
   # Usuários criados na primeira execução (somente se ainda não existirem).
   # Em produção, defina as variáveis de ambiente com senhas fortes.

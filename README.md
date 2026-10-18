@@ -5,6 +5,7 @@ Microsserviços em **Java 21 / Spring Boot 3.4.5** que integram o **Mercado Expr
 - **Disciplina:** Java Advanced, prof. Dr. Marcel Stefan Wagner (FIAP, TDS)
 - **IDE:** IntelliJ IDEA
 - **Vídeo de demonstração:** _adicionar o link do YouTube (não listado)_
+- **Aplicação em produção (Azure):** _http://SEU-DNS-OU-IP/_ (login: veja a seção 5.2)
 - **Repositório:** [github.com/2TDSPO-JPG/CP5_MercadoExpress](https://github.com/2TDSPO-JPG/CP5_MercadoExpress)
 
 ---
@@ -23,6 +24,7 @@ Microsserviços em **Java 21 / Spring Boot 3.4.5** que integram o **Mercado Expr
 11. [Banco de dados](#11-banco-de-dados)
 12. [Tratamento de erros](#12-tratamento-de-erros)
 13. [Estrutura do projeto](#13-estrutura-do-projeto)
+14. [Deploy na Azure](#14-deploy-na-azure)
 
 ---
 
@@ -189,7 +191,7 @@ Para trocar, use as variáveis `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `CLIENTE_EMAIL` 
 ### 6.0 Login e cadastro (`/login`, `/cadastro`)
 Tela de login própria, com mensagens de erro, de logout e de conta criada. O cadastro cria clientes e valida e-mail e força da senha.
 
-![Tela de login](docs/img/login.png)
+![Página inicial](docs/img/inicio.png)
 
 ### 6.1 Loja: carrinho e finalização da compra (`/loja`)
 O cliente adiciona produtos ao carrinho, informa nome, e-mail e forma de pagamento e finaliza a compra. A tela acompanha o processamento assíncrono em tempo real: pedido registrado → mensagem publicada → resposta do Banco Tranquilo → e-mail enviado. A opção **"Simular recusa"** demonstra o fluxo de pagamento recusado. Nome e e-mail vêm da conta logada, e a seção **"Meus pedidos"** lista as compras do cliente.
@@ -212,7 +214,7 @@ Atualiza sozinho a cada 5 segundos, com dados lidos do PostgreSQL:
 ![Filas e consumidores](docs/img/rabbitmq-filas.png)
 
 ### 6.4 Postman
-![Collection no Postman](docs/img/postman.png)
+Collection em `postman/CP5-Mercado-Express.postman_collection.json` (detalhes na seção 8).
 
 ### 6.5 E-mail de confirmação recebido
 ![E-mail de confirmação](docs/img/email.png)
@@ -381,7 +383,9 @@ As consultas de conferência estão em `docs/SQL_CONSULTAS.sql`.
 
 ```
 CP5_Parte2_MercadoExpress/
-├── docker-compose.yml            # RabbitMQ + PostgreSQL
+├── docker-compose.yml            # RabbitMQ + PostgreSQL (desenvolvimento local)
+├── docker-compose.prod.yml       # produção: RabbitMQ + PostgreSQL + os dois serviços
+├── .env.example                  # variáveis de produção (copiar para .env na VM)
 ├── postman/                      # collection com testes
 ├── docs/                         # consultas SQL e prints (img/)
 ├── banco-tranquilo-api/          # API do Banco Tranquilo (:8081)
@@ -398,3 +402,55 @@ CP5_Parte2_MercadoExpress/
         ├── templates/  index, login, cadastro, loja, dashboard, error/403
         └── static/     css/app.css, js/app.js
 ```
+
+## 14. Deploy na Azure
+
+A aplicação inteira roda em **uma máquina virtual Linux na Azure** com **Docker Compose** (`docker-compose.prod.yml`): RabbitMQ (com o painel), PostgreSQL, Banco Tranquilo e Mercado Express. Cada serviço Java tem um `Dockerfile` próprio, que compila o projeto com Maven e roda em Java 21. A Azure bloqueia só a porta 25 de SMTP; o envio pelo Gmail usa a 587 e funciona normalmente.
+
+**Arquitetura em produção:**
+
+```
+Internet ──▶ :80    Mercado Express (container) ──▶ rabbitmq:5672 / postgres:5432 / banco-tranquilo:8081 (rede interna do Docker)
+         ──▶ :15672 Painel do RabbitMQ
+         ──▶ :8081  Banco Tranquilo (opcional, protegido por X-API-KEY)
+```
+
+### 14.1 Criar a VM
+1. Ative o **Azure for Students** (crédito para estudantes, sem cartão) com o e-mail da faculdade.
+2. No portal: **Virtual machines → Create**
+   - Imagem: **Ubuntu Server 24.04 LTS**; tamanho: **B2s** (2 vCPU, 4 GB). A B1s não tem memória suficiente;
+   - Autenticação: **chave SSH** (baixe o `.pem`);
+   - Portas de entrada: **SSH (22)** e **HTTP (80)**.
+3. Depois de criada: **Networking → Add inbound port rule** para **15672** (painel do RabbitMQ) e, se quiser testar pelo Postman, **8081**.
+4. Opcional: em **Overview → DNS name**, defina um nome, por exemplo `mercadoexpress.brazilsouth.cloudapp.azure.com`.
+
+### 14.2 Instalar e subir
+```bash
+ssh -i chave.pem azureuser@<IP-DA-VM>
+
+# Docker
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER && newgrp docker
+
+# Projeto
+git clone https://github.com/2TDSPO-JPG/CP5_MercadoExpress.git
+cd CP5_MercadoExpress
+cp .env.example .env
+nano .env          # preencha senhas, chave do banco, Gmail e RABBITMQ_DASHBOARD_URL
+
+docker compose -f docker-compose.prod.yml up -d --build   # 1º build leva ~5-10 min
+docker compose -f docker-compose.prod.yml logs -f mercado-express
+```
+
+| Acesso | URL |
+|---|---|
+| Aplicação | `http://<IP-ou-DNS>/` |
+| Painel RabbitMQ | `http://<IP-ou-DNS>:15672` (usuário/senha do `.env`) |
+| Banco Tranquilo | `http://<IP-ou-DNS>:8081/api/pagamentos/health` |
+
+### 14.3 Operação
+- **Atualizar** depois de um push: `git pull && docker compose -f docker-compose.prod.yml up -d --build`
+- **Parar / iniciar:** `docker compose -f docker-compose.prod.yml stop` / `start`. Os dados ficam nos volumes.
+- **Custo:** a VM consome crédito enquanto estiver ligada. Depois da correção, **pare a VM pelo portal** (Stop / desalocar).
+- **Segurança:** o `.env` só existe na VM (está no `.gitignore`); PostgreSQL e a porta AMQP não ficam expostos à internet; use senhas fortes e uma senha de app do Gmail exclusiva.
+

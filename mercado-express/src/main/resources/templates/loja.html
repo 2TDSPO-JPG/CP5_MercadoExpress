@@ -19,7 +19,7 @@
     <a href="/">Início</a>
     <a href="/loja" class="auth-only active">Loja</a>
     <a href="/dashboard" class="admin-only">Dashboard</a>
-    <a href="http://localhost:15672" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="http://localhost:15672" th:href="${rabbitUrl}" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
     <a href="/login" class="guest-only">Entrar</a>
     <a href="/cadastro" class="guest-only">Criar conta</a>
   </nav>

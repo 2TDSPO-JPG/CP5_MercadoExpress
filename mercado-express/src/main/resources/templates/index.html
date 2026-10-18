@@ -19,7 +19,7 @@
     <a href="/" class="active">Início</a>
     <a href="/loja" class="auth-only">Loja</a>
     <a href="/dashboard" class="admin-only">Dashboard</a>
-    <a href="http://localhost:15672" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
+    <a href="http://localhost:15672" th:href="${rabbitUrl}" class="admin-only" target="_blank" rel="noreferrer">RabbitMQ</a>
     <a href="/login" class="guest-only">Entrar</a>
     <a href="/cadastro" class="guest-only">Criar conta</a>
   </nav>
@@ -50,7 +50,7 @@
   <div class="actions auth-only">
     <a class="btn" href="/loja">Ir para a loja (carrinho)</a>
     <a class="btn admin-only" href="/dashboard">Dashboard da gerência</a>
-    <a class="btn secondary admin-only" href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ Management</a>
+    <a class="btn secondary admin-only" href="http://localhost:15672" th:href="${rabbitUrl}" target="_blank" rel="noreferrer">RabbitMQ Management</a>
     <a class="btn secondary admin-only" href="/swagger-ui/index.html" target="_blank" rel="noreferrer">Swagger (API)</a>
   </div>
 
