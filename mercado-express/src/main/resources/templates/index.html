@@ -1,4 +1,80 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Mercado Express | Gestão</title><style>
-:root{font-family:Inter,Arial,sans-serif;color:#172033;background:#f4f6fb}body{margin:0}.top{background:#111b34;color:white;padding:24px 5vw}.top h1{margin:0}.top p{color:#c6cee1}.wrap{max-width:1100px;margin:28px auto;padding:0 20px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:16px}.card{background:white;border:1px solid #e2e7f0;border-radius:16px;padding:22px;box-shadow:0 5px 20px #1720330a}.label{color:#65718a;font-size:14px}.value{font-size:28px;font-weight:750;margin-top:10px}.actions{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0}.actions a{background:#4f46e5;color:white;padding:12px 16px;border-radius:10px;text-decoration:none;font-weight:600}.actions a.secondary{background:#e6e9f8;color:#252b4a}.foot{color:#69758a;font-size:13px;margin-top:22px}</style></head><body><header class="top"><h1>Mercado Express</h1><p>Central de operação · pagamentos assíncronos · mensageria</p></header><main class="wrap"><div class="cards"><section class="card"><div class="label">Pedidos confirmados</div><div class="value" id="confirmed">—</div></section><section class="card"><div class="label">Faturamento aprovado</div><div class="value" id="sales">—</div></section><section class="card"><div class="label">Lucro bruto estimado</div><div class="value" id="profit">—</div></section><section class="card"><div class="label">Produtos com estoque baixo</div><div class="value" id="stock">—</div></section></div><div class="actions"><a href="/api/produtos">Consultar produtos (JSON)</a><a href="/api/dashboard" class="secondary">Dashboard (JSON)</a><a href="http://localhost:15672" class="secondary" target="_blank" rel="noreferrer">RabbitMQ Management</a></div><section class="card"><h2>Operação</h2><p>Use o Postman para cadastrar produtos e enviar compras. O status é atualizado após o processamento assíncrono pelo RabbitMQ e pelo serviço Banco Tranquilo.</p><p id="mail">Carregando situação dos e-mails…</p></section><p class="foot">Os indicadores são carregados da API e representam dados do banco local. Lucro bruto estimado não considera impostos ou despesas não cadastradas.</p></main><script>
-const money=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0));async function load(){try{const r=await fetch('/api/dashboard');const d=await r.json();document.querySelector('#confirmed').textContent=d.pedidosConfirmados;document.querySelector('#sales').textContent=money(d.faturamentoAprovado);document.querySelector('#profit').textContent=money(d.lucroBrutoEstimado);document.querySelector('#stock').textContent=d.produtosEstoqueBaixo;document.querySelector('#mail').textContent=`E-mails enviados: ${d.emailsEnviados} · Falhas registradas: ${d.emailsComFalha}`;}catch(e){document.querySelector('#mail').textContent='Não foi possível carregar os indicadores. Verifique se a API está em execução.'}}load();setInterval(load,10000);
-</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mercado Express</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Mercado Express</h1>
+    <p>Compras com pagamento assíncrono pelo Banco Tranquilo · RabbitMQ · PostgreSQL · e-mail</p>
+  </div>
+  <nav class="nav">
+    <a href="/" class="active">Início</a>
+    <a href="/loja">Loja</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="cards">
+    <section class="card"><div class="label">Pedidos confirmados</div><div class="value" id="confirmed">—</div></section>
+    <section class="card"><div class="label">Faturamento aprovado</div><div class="value" id="sales">—</div></section>
+    <section class="card"><div class="label">Lucro bruto estimado</div><div class="value" id="profit">—</div></section>
+    <section class="card"><div class="label">Produtos com estoque baixo</div><div class="value" id="stock">—</div></section>
+  </div>
+
+  <div class="actions">
+    <a class="btn" href="/loja">Ir para a loja (carrinho)</a>
+    <a class="btn" href="/dashboard">Dashboard da gerência</a>
+    <a class="btn secondary" href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ Management</a>
+    <a class="btn secondary" href="/swagger-ui/index.html" target="_blank" rel="noreferrer">Swagger (API)</a>
+  </div>
+
+  <div class="hero">
+    <section class="card">
+      <h2>Como funciona</h2>
+      <p>O cliente monta o carrinho e finaliza a compra. O Mercado Express grava o pedido como <b>PENDENTE</b>,
+        reserva o estoque e publica a solicitação na exchange <code>mercado.pagamentos.exchange</code>.
+        Um consumidor chama a API do <b>Banco Tranquilo</b>, publica a resposta e, se o pagamento for aprovado,
+        o cliente recebe um e-mail de confirmação, registrado na tabela <code>emails_enviados</code>.</p>
+    </section>
+    <section class="card">
+      <h2>Fluxo de mensagens</h2>
+      <div class="flow">POST /api/compras
+  └─▶ pagamento.solicitado ──▶ Banco Tranquilo (:8081)
+        └─▶ pagamento.resultado ──▶ pedido CONFIRMADO / CANCELADO
+              └─▶ email.confirmacao ──▶ SMTP + emails_enviados</div>
+    </section>
+    <section class="card">
+      <h2>Situação dos e-mails</h2>
+      <p id="mail">Carregando…</p>
+    </section>
+  </div>
+
+  <p class="foot">Indicadores carregados de /api/dashboard (PostgreSQL). Lucro bruto estimado = preço de venda − custo cadastrado; não considera impostos ou despesas.</p>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+  async function load() {
+    try {
+      const d = await api('/api/dashboard');
+      document.querySelector('#confirmed').textContent = d.pedidosConfirmados;
+      document.querySelector('#sales').textContent = money(d.faturamentoAprovado);
+      document.querySelector('#profit').textContent = money(d.lucroBrutoEstimado);
+      document.querySelector('#stock').textContent = d.produtosEstoqueBaixo;
+      document.querySelector('#mail').textContent = `E-mails enviados: ${d.emailsEnviados} · Falhas registradas: ${d.emailsComFalha}`;
+    } catch (e) {
+      document.querySelector('#mail').textContent = 'Não foi possível carregar os indicadores. Verifique se a API está em execução.';
+    }
+  }
+  load();
+  setInterval(load, 10000);
+</script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Loja | Mercado Express</title>
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <h1>Mercado Express · Loja</h1>
+    <p>Monte o carrinho e finalize: o pagamento é processado pelo Banco Tranquilo via RabbitMQ</p>
+  </div>
+  <nav class="nav">
+    <a href="/">Início</a>
+    <a href="/loja" class="active">Loja</a>
+    <a href="/dashboard">Dashboard</a>
+    <a href="http://localhost:15672" target="_blank" rel="noreferrer">RabbitMQ</a>
+  </nav>
+</header>
+
+<main class="wrap">
+  <div class="shop">
+    <section>
+      <div class="products" id="products"><div class="card muted">Carregando produtos…</div></div>
+    </section>
+
+    <aside class="card cart">
+      <h2>Carrinho</h2>
+      <div id="cart-items"><p class="muted">Seu carrinho está vazio.</p></div>
+      <div class="total"><span>Total</span><span id="cart-total">R$ 0,00</span></div>
+
+      <form id="checkout" autocomplete="on">
+        <label class="field">Nome<input name="clienteNome" required maxlength="120"></label>
+        <label class="field" style="margin-top:8px">E-mail (recebe a confirmação)<input name="clienteEmail" type="email" required></label>
+        <label class="field" style="margin-top:8px">Forma de pagamento
+          <select name="metodoPagamento">
+            <option value="PIX">PIX</option>
+            <option value="CARTAO_CREDITO">Cartão de crédito</option>
+            <option value="CARTAO_DEBITO">Cartão de débito</option>
+            <option value="BOLETO">Boleto</option>
+          </select>
+        </label>
+        <label class="check" style="margin-top:10px"><input type="checkbox" name="recusar"> Simular recusa do Banco Tranquilo (demonstração)</label>
+        <button class="btn" id="btn-buy" type="submit" style="width:100%;margin-top:12px" disabled>Finalizar compra</button>
+      </form>
+
+      <div id="tracker" hidden>
+        <h2 style="margin-top:18px">Pedido <span id="tr-id"></span></h2>
+        <ol class="steps">
+          <li id="s1"><span class="dot"></span><span>Pedido registrado no PostgreSQL (PENDENTE) e estoque reservado</span></li>
+          <li id="s2"><span class="dot"></span><span>Mensagem publicada em <code>pagamento.solicitado</code></span></li>
+          <li id="s3"><span class="dot"></span><span id="s3-txt">Aguardando resposta do Banco Tranquilo…</span></li>
+          <li id="s4"><span class="dot"></span><span id="s4-txt">E-mail de confirmação</span></li>
+        </ol>
+        <p id="tr-msg" class="sub"></p>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script src="/js/app.js"></script>
+<script>
+  let produtos = [];
+  const cart = new Map(); // produtoId -> quantidade
+
+  async function loadProdutos() {
+    try {
+      produtos = await api('/api/produtos');
+      renderProdutos();
+      renderCart();
+    } catch (e) {
+      document.getElementById('products').innerHTML = `<div class="card">Não foi possível carregar os produtos: ${esc(e.message)}</div>`;
+    }
+  }
+
+  function renderProdutos() {
+    const el = document.getElementById('products');
+    if (!produtos.length) { el.innerHTML = '<div class="card muted">Nenhum produto cadastrado. Cadastre no <a href="/dashboard">dashboard</a>.</div>'; return; }
+    el.innerHTML = produtos.map(p => {
+      const noCart = cart.get(p.id) || 0;
+      const disp = p.estoque - noCart;
+      return `<article class="card product">
+        <div class="name">${esc(p.nome)}</div>
+        <div class="desc">${esc(p.descricao)}</div>
+        <div class="price">${money(p.precoVenda)}</div>
+        <div class="row">
+          <span class="sub">${p.estoque > 0 ? `${p.estoque} em estoque` : '<span class="badge b-bad">esgotado</span>'}</span>
+          <button class="btn small" data-add="${p.id}" ${disp <= 0 ? 'disabled' : ''}>Adicionar</button>
+        </div>
+      </article>`;
+    }).join('');
+  }
+
+  function renderCart() {
+    const el = document.getElementById('cart-items');
+    let total = 0;
+    const linhas = [];
+    for (const [id, qtd] of cart) {
+      const p = produtos.find(x => x.id === id);
+      if (!p) { cart.delete(id); continue; }
+      total += Number(p.precoVenda) * qtd;
+      linhas.push(`<div class="cart-item">
+        <div><div>${esc(p.nome)}</div><div class="sub">${money(p.precoVenda)} cada</div></div>
+        <div class="qty">
+          <button type="button" data-dec="${id}" aria-label="Diminuir">−</button><span>${qtd}</span>
+          <button type="button" data-inc="${id}" aria-label="Aumentar" ${qtd >= p.estoque ? 'disabled' : ''}>+</button>
+        </div>
+      </div>`);
+    }
+    el.innerHTML = linhas.length ? linhas.join('') : '<p class="muted">Seu carrinho está vazio.</p>';
+    document.getElementById('cart-total').textContent = money(total);
+    document.getElementById('btn-buy').disabled = cart.size === 0;
+  }
+
+  document.addEventListener('click', ev => {
+    const t = ev.target.closest('button');
+    if (!t) return;
+    const add = t.dataset.add || t.dataset.inc, dec = t.dataset.dec;
+    if (add) {
+      const id = Number(add), p = produtos.find(x => x.id === id);
+      const atual = cart.get(id) || 0;
+      if (p && atual < p.estoque) cart.set(id, atual + 1);
+    } else if (dec) {
+      const id = Number(dec), atual = cart.get(id) || 0;
+      if (atual <= 1) cart.delete(id); else cart.set(id, atual - 1);
+    } else return;
+    renderProdutos(); renderCart();
+  });
+
+  function step(id, cls, text) {
+    const li = document.getElementById(id);
+    li.className = cls;
+    if (text) li.querySelector('span:last-child').textContent = text;
+  }
+
+  document.getElementById('checkout').addEventListener('submit', async ev => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    const body = {
+      clienteNome: f.get('clienteNome'),
+      clienteEmail: f.get('clienteEmail'),
+      metodoPagamento: f.get('metodoPagamento'),
+      itens: [...cart].map(([produtoId, quantidade]) => ({ produtoId, quantidade }))
+    };
+    if (f.get('recusar')) body.resultadoSimulado = 'RECUSADO';
+
+    const btn = document.getElementById('btn-buy');
+    btn.disabled = true;
+    try {
+      const r = await api('/api/compras', { method: 'POST', body: JSON.stringify(body) });
+      cart.clear();
+      document.getElementById('tracker').hidden = false;
+      document.getElementById('tr-id').textContent = '#' + r.pedidoId;
+      document.getElementById('tr-msg').textContent = `Resposta da API: 202 Accepted · total ${money(r.total)}`;
+      step('s1', 'done'); step('s2', 'done'); step('s3', 'run', 'Aguardando resposta do Banco Tranquilo…'); step('s4', '', 'E-mail de confirmação');
+      toast('Compra enviada! Acompanhe o status ao lado.');
+      acompanhar(r.pedidoId);
+      loadProdutos();
+    } catch (e) {
+      toast(e.message, true);
+      btn.disabled = cart.size === 0;
+    }
+  });
+
+  async function acompanhar(id, tentativas = 0) {
+    try {
+      const p = await api(`/api/compras/${id}`);
+      if (p.status === 'PENDENTE' && tentativas < 30) { setTimeout(() => acompanhar(id, tentativas + 1), 1000); return; }
+      if (p.status === 'CONFIRMADO') {
+        step('s3', 'done', 'Pagamento APROVADO pelo Banco Tranquilo');
+        step('s4', 'run', 'Enviando e-mail de confirmação…');
+        acompanharEmail(id);
+      } else if (p.status === 'CANCELADO') {
+        step('s3', 'fail', 'Pagamento RECUSADO pelo Banco Tranquilo — estoque devolvido');
+        step('s4', '', 'E-mail não enviado (pagamento não confirmado)');
+      } else if (p.status === 'ERRO_PAGAMENTO') {
+        step('s3', 'fail', 'Banco Tranquilo indisponível — pedido pode ser reprocessado no dashboard');
+      } else {
+        step('s3', 'run', 'Ainda pendente. Verifique se o Banco Tranquilo está rodando.');
+      }
+      loadProdutos();
+    } catch (e) { toast(e.message, true); }
+  }
+
+  async function acompanharEmail(id, tentativas = 0) {
+    try {
+      const emails = await api('/api/emails');
+      const e = emails.find(x => x.pedidoId === id);
+      if (!e && tentativas < 20) { setTimeout(() => acompanharEmail(id, tentativas + 1), 1000); return; }
+      if (e && e.status === 'ENVIADO') step('s4', 'done', `E-mail enviado para ${e.destinatario}`);
+      else if (e) step('s4', 'fail', `Falha no envio do e-mail (registrada no banco): ${e.detalhe || ''}`);
+      else step('s4', 'run', 'E-mail ainda não registrado.');
+    } catch (err) { toast(err.message, true); }
+  }
+
+  loadProdutos();
+</script>
+</body>
+</html>

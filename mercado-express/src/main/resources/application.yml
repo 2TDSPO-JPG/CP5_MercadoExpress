@@ -5,10 +5,11 @@ spring:
   application:
     name: mercado-express
 
+  # PostgreSQL (docker-compose expõe o container na porta 5433 do computador)
   datasource:
-    url: jdbc:postgresql://localhost:5433/mercado_express
-    username: mercado
-    password: mercado_dev_123
+    url: ${DB_URL:jdbc:postgresql://localhost:5433/mercado_express}
+    username: ${DB_USERNAME:mercado}
+    password: ${DB_PASSWORD:mercado_dev_123}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -24,6 +25,14 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:mercado}
     password: ${RABBITMQ_PASSWORD:mercado_dev_123}
+    listener:
+      simple:
+        # Tenta processar a mensagem até 3 vezes; depois descarta em vez de reenfileirar para sempre
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
@@ -44,6 +53,9 @@ app:
 
   mail:
     from: ${MAIL_FROM:no-reply@mercadoexpress.local}
+
+  # Cadastra produtos de exemplo se a tabela estiver vazia
+  seed-produtos: ${SEED_PRODUTOS:true}
 
 management:
   endpoints:
