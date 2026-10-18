@@ -63,8 +63,10 @@ if ! az postgres flexible-server show -g "$RG" -n "$PG" -o none 2>/dev/null; the
   az postgres flexible-server create -g "$RG" -n "$PG" -l "$LOC" \
     --tier Burstable --sku-name Standard_B1ms --storage-size 32 --version 16 \
     --admin-user "$PG_USER" --admin-password "$PG_PASS" \
-    --public-access 0.0.0.0 --database-name "$DB" --yes -o none
+    --public-access 0.0.0.0 --yes -o none
 fi
+az postgres flexible-server db show --resource-group "$RG" --server-name "$PG" --name "$DB" -o none 2>/dev/null || \
+  az postgres flexible-server db create --resource-group "$RG" --server-name "$PG" --name "$DB" -o none
 
 az webapp config appsettings set -g "$RG" -n "$BANCO" -o none --settings \
   SERVER_PORT=80 BANCO_API_KEY="$API_KEY" JAVA_OPTS="-Xmx256m"

@@ -4,8 +4,9 @@ Microsserviços em **Java 21 / Spring Boot 3.4.5** que integram o **Mercado Expr
 
 - **Disciplina:** Java Advanced, prof. Dr. Marcel Stefan Wagner (FIAP, TDS)
 - **IDE:** IntelliJ IDEA
-- **Vídeo de demonstração:** _adicionar o link do YouTube (não listado)_
-- **Aplicação em produção (Azure):** _http://SEU-DNS-OU-IP/_ (login: veja a seção 5.2)
+- **Vídeo de demonstração:** https://youtu.be/OmdXqyZ2WFA
+- **Aplicação em produção (Azure):** https://mercadoexpress-pjg2026.azurewebsites.net (logins de acesso no arquivo de entrega enviado ao professor)
+- **Banco Tranquilo (Azure):** https://bancotranquilo-pjg2026.azurewebsites.net/api/pagamentos/health
 - **Repositório:** [github.com/2TDSPO-JPG/CP5_MercadoExpress](https://github.com/2TDSPO-JPG/CP5_MercadoExpress)
 
 ---
@@ -24,7 +25,6 @@ Microsserviços em **Java 21 / Spring Boot 3.4.5** que integram o **Mercado Expr
 11. [Banco de dados](#11-banco-de-dados)
 12. [Tratamento de erros](#12-tratamento-de-erros)
 13. [Estrutura do projeto](#13-estrutura-do-projeto)
-14. [Deploy na Azure](#14-deploy-na-azure)
 
 ---
 
@@ -383,9 +383,7 @@ As consultas de conferência estão em `docs/SQL_CONSULTAS.sql`.
 
 ```
 CP5_Parte2_MercadoExpress/
-├── docker-compose.yml            # RabbitMQ + PostgreSQL (desenvolvimento local)
-├── docker-compose.prod.yml       # produção: RabbitMQ + PostgreSQL + os dois serviços
-├── .env.example                  # variáveis de produção (copiar para .env na VM)
+├── docker-compose.yml            # RabbitMQ + PostgreSQL
 ├── postman/                      # collection com testes
 ├── docs/                         # consultas SQL e prints (img/)
 ├── banco-tranquilo-api/          # API do Banco Tranquilo (:8081)
@@ -402,65 +400,3 @@ CP5_Parte2_MercadoExpress/
         ├── templates/  index, login, cadastro, loja, dashboard, error/403
         └── static/     css/app.css, js/app.js
 ```
-
-## 14. Deploy na Azure
-
-Deploy em **Azure App Service (Web App Java 21)**, com build e publicação automáticos pelo **GitHub Actions** a cada push na `main`.
-
-| Componente | Serviço |
-|---|---|
-| Mercado Express | Azure App Service (Linux, Java 21), plano B1, *Always On* |
-| Banco Tranquilo | Azure App Service (Linux, Java 21), mesmo plano |
-| PostgreSQL | Azure Database for PostgreSQL – Flexible Server (B1ms, SSL) |
-| RabbitMQ | **CloudAMQP**, plano gratuito *Little Lemur*, conexão `amqps://` (a Azure não oferece RabbitMQ gerenciado) |
-| E-mail | Gmail SMTP 587 (a Azure bloqueia apenas a porta 25) |
-| CI/CD | `.github/workflows/deploy-azure.yml`: Maven build → `azure/webapps-deploy` |
-
-```
-Navegador ──HTTPS──▶ mercadoexpress-<sufixo>.azurewebsites.net ──amqps──▶ CloudAMQP (RabbitMQ)
-                         │  └──JDBC/SSL──▶ PostgreSQL Flexible Server
-                         └──HTTPS + X-API-KEY──▶ bancotranquilo-<sufixo>.azurewebsites.net
-```
-
-### 14.1 RabbitMQ (CloudAMQP)
-1. Crie uma conta em https://www.cloudamqp.com e uma instância **Little Lemur (Free)**.
-2. Na instância, copie a **AMQP URL** (`amqps://...`) e o link do botão **RabbitMQ Manager** (o painel).
-
-### 14.2 Criar a infraestrutura (Azure Cloud Shell, Bash)
-```bash
-git clone https://github.com/2TDSPO-JPG/CP5_MercadoExpress.git
-cd CP5_MercadoExpress
-bash azure/criar-recursos.sh SEU-SUFIXO        # ex.: pfg2026 (letras minúsculas e números)
-```
-O script `azure/criar-recursos.sh`:
-- pergunta as senhas sem exibi-las na tela;
-- gera uma chave aleatória para a API do Banco Tranquilo;
-- cria o plano, os dois Web Apps e o PostgreSQL;
-- configura todas as variáveis de ambiente nos Web Apps;
-- salva os *publish profiles* em `~/publish-banco.xml` e `~/publish-mercado.xml`.
-
-A região padrão é `canadacentral`. Para outra região liberada, use `LOC=brazilsouth bash azure/criar-recursos.sh SEU-SUFIXO`.
-
-### 14.3 Ligar o GitHub Actions
-No GitHub: **Settings → Secrets and variables → Actions**
-
-| Tipo | Nome | Valor |
-|---|---|---|
-| Secret | `AZURE_PUBLISH_PROFILE_BANCO` | saída de `cat ~/publish-banco.xml` |
-| Secret | `AZURE_PUBLISH_PROFILE_MERCADO` | saída de `cat ~/publish-mercado.xml` |
-| Variable | `AZURE_WEBAPP_BANCO` | `bancotranquilo-SEU-SUFIXO` |
-| Variable | `AZURE_WEBAPP_MERCADO` | `mercadoexpress-SEU-SUFIXO` |
-
-Depois, na aba **Actions**, abra **Deploy na Azure (App Service)** e clique em **Run workflow**. A partir daí, cada push na `main` publica automaticamente.
-
-### 14.4 Acessos
-| | URL |
-|---|---|
-| Aplicação | `https://mercadoexpress-SEU-SUFIXO.azurewebsites.net` |
-| Banco Tranquilo | `https://bancotranquilo-SEU-SUFIXO.azurewebsites.net/api/pagamentos/health` |
-| Painel RabbitMQ | link *RabbitMQ Manager* do CloudAMQP (também no botão "RabbitMQ" do site) |
-| Logs | `az webapp log tail -g rg-mercado -n mercadoexpress-SEU-SUFIXO` |
-
-> **Alternativa:** o repositório também tem `docker-compose.prod.yml` e `.env.example` para rodar tudo numa VM Linux com Docker (`docker compose -f docker-compose.prod.yml up -d --build`).
-
-Depois da correção, pare os Web Apps e o PostgreSQL pelo portal para não consumir crédito.
